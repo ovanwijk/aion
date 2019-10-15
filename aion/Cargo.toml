@@ -6,6 +6,8 @@ authors = ["olaf <o_van_wijk@hotmail.com>"]
 [dependencies]
 zmq = "0.9.1"
 actix-web = "1.0.7"
+riker = "0.3.1"
+hocon = "0.3.0"
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
