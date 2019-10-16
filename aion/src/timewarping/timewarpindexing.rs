@@ -7,12 +7,14 @@ use std::{
     hash::{Hash, Hasher, BuildHasherDefault, BuildHasher},
 };
 use std::collections::LinkedList;
+use crate::SETTINGS;
 use riker::actors::*;
 use riker::actors::Context;
 use aionmodel::transaction::*;
 use aionmodel::tangle::*;
 use timewarping::zmqlistener::*;
 use timewarping::Protocol;
+use timewarping::Timewarp;
 
 
 
@@ -26,7 +28,8 @@ pub struct RegisterZMQListener {
 pub struct TimewarpIndexing {
     pub tangle:Tangle,
     avg_count: i64,
-    avg_distance: f64
+    avg_distance: f64,
+    
 }
 
 impl Actor for TimewarpIndexing {
@@ -74,6 +77,41 @@ impl TimewarpIndexing {
         }
         println!("AVG Timeleap {}", self.avg_distance);  
     }
+
+    fn detect_timewarp(&mut self, tx:&Transaction) -> Option<Timewarp>{
+        let branch_step = self.tangle.get(&tx.branch);
+        
+        if branch_step.is_some() {
+            let diff = (tx.timestamp - branch_step.unwrap().timestamp) as usize;
+            if diff > 0 && 
+                diff > SETTINGS.timewarp_index_settings.detection_threshold_lower_bound_in_seconds &&
+                diff < SETTINGS.timewarp_index_settings.detection_threshold_upper_bound_in_seconds { //Filterout direct references through bundes
+                //Found branch timewarp
+                 return Some(Timewarp{
+                    from: tx.id.clone(),
+                    to: branch_step.unwrap().id.clone(),
+                    distance: diff as i64,
+                    trunk_or_branch: false
+                })    
+            }
+        }
+        let trunk_step = self.tangle.get(&tx.trunk);
+        if trunk_step.is_some() {
+            let diff = (tx.timestamp - trunk_step.unwrap().timestamp) as usize;
+            if diff > 0 && 
+                diff > SETTINGS.timewarp_index_settings.detection_threshold_lower_bound_in_seconds &&
+                diff < SETTINGS.timewarp_index_settings.detection_threshold_upper_bound_in_seconds { //Filterout direct references through bundes
+                //Found trunk timewarp
+                return Some(Timewarp{
+                    from: tx.id.clone(),
+                    to: trunk_step.unwrap().id.clone(),
+                    distance: diff as i64,
+                    trunk_or_branch: true
+                })     
+            }
+        }
+        None
+    }
 }
 
 
@@ -82,7 +120,9 @@ impl TimewarpIndexing {
  * Actor receive messages
  */
 impl TimewarpIndexing {
-    fn actor() -> Self {       
+    fn actor() -> Self {   
+        //println!("{:?}{:?}", SETTINGS.node_settings.iri_host.to_string(), " Hello");
+        //println!("{:?}", SETTINGS.timewarp_index_settings.detection_threshold_upper_bound_in_seconds);
         TimewarpIndexing {
             tangle: Tangle::default(),
             avg_count: 1,
@@ -100,8 +140,11 @@ impl TimewarpIndexing {
         let cpy = _msg.tx.clone();
         
         self.tangle.insert(_msg.tx);
-        self.cal_avarage_timeleap(&cpy);
-        
+        //self.cal_avarage_timeleap(&cpy);
+        let timewarp = self.detect_timewarp(&cpy);
+        if timewarp.is_some() {
+            println!("Found a timewarp!!!!!");
+        }
         self.tangle.maintain();
         //println!("Receiving transaction {}", _msg.tx.id);               
     }

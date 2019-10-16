@@ -1,12 +1,14 @@
 pub mod zmqlistener;
 pub mod timewarpindexing;
+pub mod timewarpwalker;
 
 #[derive(Clone, Debug)]
 pub enum Protocol {
-    StartListening(zmqlistener::StartListening),
     RegisterRoutee,
     Start,
+    StartTimewarpWalking(timewarpwalker::StartTimewarpWalking),
     PullTxData(zmqlistener::PullTxData),
+    StartListening(zmqlistener::StartListening),
     NewTransaction(zmqlistener::NewTransaction),
     RegisterZMQListener(timewarpindexing::RegisterZMQListener)
 }
@@ -15,16 +17,5 @@ pub struct Timewarp {
     from:String,
     to:String,
     distance:i64, //timestamp difference
-    trunk:bool,
-    branch:bool,
-}
-
-impl Timewarp {
-    pub fn trunkOrBranch(&self) -> bool {
-        if self.trunk {
-            true
-        } else {
-            false
-        }
-    }
+    trunk_or_branch:bool
 }
