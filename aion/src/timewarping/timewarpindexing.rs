@@ -15,6 +15,7 @@ use aionmodel::tangle::*;
 use timewarping::zmqlistener::*;
 use timewarping::Protocol;
 use timewarping::Timewarp;
+use timewarping::timewarpwalker::*;
 
 
 
@@ -84,8 +85,8 @@ impl TimewarpIndexing {
         if branch_step.is_some() {
             let diff = (tx.timestamp - branch_step.unwrap().timestamp) as usize;
             if diff > 0 && 
-                diff > SETTINGS.timewarp_index_settings.detection_threshold_lower_bound_in_seconds &&
-                diff < SETTINGS.timewarp_index_settings.detection_threshold_upper_bound_in_seconds { //Filterout direct references through bundes
+                diff > SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds &&
+                diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds { //Filterout direct references through bundes
                 //Found branch timewarp
                  return Some(Timewarp{
                     from: tx.id.clone(),
@@ -99,8 +100,8 @@ impl TimewarpIndexing {
         if trunk_step.is_some() {
             let diff = (tx.timestamp - trunk_step.unwrap().timestamp) as usize;
             if diff > 0 && 
-                diff > SETTINGS.timewarp_index_settings.detection_threshold_lower_bound_in_seconds &&
-                diff < SETTINGS.timewarp_index_settings.detection_threshold_upper_bound_in_seconds { //Filterout direct references through bundes
+                diff > SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds &&
+                diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds { //Filterout direct references through bundes
                 //Found trunk timewarp
                 return Some(Timewarp{
                     from: tx.id.clone(),
@@ -129,10 +130,6 @@ impl TimewarpIndexing {
             avg_distance: 1000.0 //default 1 second
         }
     }
-
-
-
-
      fn receive_newtransaction(&mut self,
                 _ctx: &Context<Protocol>,
                 _msg: NewTransaction,
@@ -143,7 +140,16 @@ impl TimewarpIndexing {
         //self.cal_avarage_timeleap(&cpy);
         let timewarp = self.detect_timewarp(&cpy);
         if timewarp.is_some() {
+            let my_actor3 = _ctx.actor_of(TimewarpWalker::props(), &format!("timewarp-walking-{}", self.avg_count)).unwrap();
+            let tw = timewarp.unwrap();
             println!("Found a timewarp!!!!!");
+
+            my_actor3.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
+                target_hash: tw.to, 
+                source_timestamp: cpy.timestamp as usize, 
+                trunk_or_branch: tw.trunk_or_branch})
+                , None);
+           
         }
         self.tangle.maintain();
         //println!("Receiving transaction {}", _msg.tx.id);               

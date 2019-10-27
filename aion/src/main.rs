@@ -10,10 +10,11 @@ extern crate json;
 extern crate serde_json;
 extern crate riker;
 extern crate iota_lib_rs;
-
+extern crate rocksdb;
 
 mod timewarping;
 mod aionmodel;
+mod indexstorage;
 
 use lazy_static::*;
 use iota_lib_rs::*;
@@ -22,12 +23,13 @@ use riker::actors::*;
 use hocon::HoconLoader;
 use std::*;
 use json::JsonValue;
-
+use indexstorage::rocksdb::RocksDBProvider;
+use indexstorage::TimewarpIndexEntry;
 use timewarping::zmqlistener::*;
 use timewarping::timewarpindexing::*;
 use timewarping::timewarpwalker::*;
-use timewarping::Protocol;
 
+use timewarping::Protocol;
 use serde_derive::{Deserialize, Serialize};
 //fn index(info: web::Path<(u32, String)>) -> impl Responder {
 //    format!("Hello {}! id:{}", info.1, info.0)
@@ -38,6 +40,7 @@ use serde_derive::{Deserialize, Serialize};
 pub struct AppSettings {
     node_settings: NodeSettings,
     timewarp_index_settings: TimewarpIndexSettings,
+    cache_settings: CacheSettings
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -48,10 +51,19 @@ pub struct NodeSettings {
     zmq_port: usize
 }
 
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct CacheSettings {
+    local_tangle_max_transactions: usize,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct TimewarpIndexSettings {
-    detection_threshold_lower_bound_in_seconds: usize,
-    detection_threshold_upper_bound_in_seconds: usize,
+    detection_threshold_min_timediff_in_seconds: usize,
+    detection_threshold_max_timediff_in_seconds: usize,
+    time_index_clustering_in_seconds: usize,
+    time_index_max_length_in_seconds: usize,
+    time_index_database_location: String
 }
 
 // /// This handler uses json extractor
@@ -68,14 +80,20 @@ lazy_static! {
             let lconfig = HOCON_CONFIG.clone().unwrap();
             AppSettings {
                 node_settings: NodeSettings {
-                    iri_host: lconfig["iri_api_host"].as_string().unwrap(),
-                    iri_port: lconfig["iri_api_port"].as_i64().unwrap() as usize,
-                    zmq_host: lconfig["zmq_host"].as_string().unwrap(),
-                    zmq_port: lconfig["zmq_port"].as_i64().unwrap() as usize
+                    iri_host: lconfig["nodes"]["iri_api_host"].as_string().unwrap(),
+                    iri_port: lconfig["nodes"]["iri_api_port"].as_i64().unwrap() as usize,
+                    zmq_host: lconfig["nodes"]["zmq_host"].as_string().unwrap(),
+                    zmq_port: lconfig["nodes"]["zmq_port"].as_i64().unwrap() as usize
+                },
+                cache_settings: CacheSettings{
+                    local_tangle_max_transactions: lconfig["caching"]["local_tangle_max_transactions"].as_i64().unwrap() as usize
                 },
                 timewarp_index_settings: TimewarpIndexSettings {
-                    detection_threshold_lower_bound_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_lower_bound_in_seconds"].as_i64().unwrap() as usize,
-                    detection_threshold_upper_bound_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_upper_bound_in_seconds"].as_i64().unwrap() as usize
+                    detection_threshold_min_timediff_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_min_timediff_in_seconds"].as_i64().unwrap() as usize,
+                    detection_threshold_max_timediff_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_max_timediff_in_seconds"].as_i64().unwrap() as usize,
+                    time_index_clustering_in_seconds: lconfig["timewarp_indexing"]["time_index_clustering_in_seconds"].as_i64().unwrap() as usize,
+                    time_index_max_length_in_seconds: lconfig["timewarp_indexing"]["time_index_max_length_in_seconds"].as_i64().unwrap() as usize,
+                    time_index_database_location: lconfig["timewarp_indexing"]["time_index_database_location"].as_string().unwrap()
                 }
             }
             
@@ -89,36 +107,47 @@ fn main() {
     if args.len() == 2 {
         config_file = &args[1];
     }
+      let ldr = HoconLoader::new();
+     let fll = ldr.load_file(&config_file);
+        if fll.is_err() {
+            let herror = fll.unwrap_err();
+            println!("{}", herror);
+            return ()
+        }
     unsafe{
-        let ldr = HoconLoader::new();
-        let fll = ldr.load_file(&config_file);
-        HOCON_CONFIG = Some(fll.unwrap().hocon().unwrap());
+        let hcon = fll.unwrap().hocon();
+         if hcon.is_err() {
+            let herror = hcon.unwrap_err();
+            println!("{}", herror);
+            return ()
+        }
+        HOCON_CONFIG = Some(hcon.unwrap());
     }
 
     lazy_static::initialize(&SETTINGS);
 
     let sys = ActorSystem::new().unwrap();
     
-    let propszmq = ZMQListener::props();
-    let propstwi = TimewarpIndexing::props();
-    let my_actor1 = sys.actor_of(propszmq, "zmq-listener").unwrap();
-    let my_actor1_2 = my_actor1.clone();
-    let my_actor2 = sys.actor_of(propstwi, "timewarp-indexing").unwrap();
+    
+    let zmq_actor = sys.actor_of(ZMQListener::props(), "zmq-listener").unwrap();
+    let my_actor1_2 = zmq_actor.clone(); 
+    let indexing_actor = sys.actor_of(TimewarpIndexing::props(), "timewarp-indexing").unwrap();
+    let storage_actor = sys.actor_of(RocksDBProvider::props(), "index-storage").unwrap();
 
 
-    let my_actor3 = sys.actor_of(TimewarpWalker::props(), "timewarp-walking").unwrap();
+    let temp_actor = sys.actor_of(TimewarpWalker::props(), "timewarp-walking").unwrap();
 
-
-    my_actor3.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
-        target_hash: "LRSUVNCHREADXPCRQH99XMRXOXQSZIYKQXRXOYSCLZWQ9KDEWUTFNKOLWYDOPEUCPWLMVEMTJMFGRYSBC".to_string(), 
-        source_timestamp: 1000000, 
-        trunk_or_branch: true, 
-        warp_step: 10000, 
-        warp_error: 0.2})
-        , None);
+    storage_actor.tell(Protocol::AddToIndexPersistence(TimewarpIndexEntry{key: 10, values: vec!["Hallo".to_string(), "world".to_string()]}), None);
+    storage_actor.tell(Protocol::GetFromIndexPersistence(10), None);
+    
+    // temp_actor.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
+    //     target_hash: "LRYSLAXS9ZJYMQ9ENALNCRNUJBIFNVJTEOILGMJVJAMPYH9EBQBPGDXPTCZUR9ATTYZBANMPQIDTWNNK9".to_string(), 
+    //     source_timestamp: 1571333939, 
+    //     trunk_or_branch: false})
+    //     , None);
     //{ zmq_listener: BasicActorRef::from(my_actor1.clone())}
-    let _zmq_listner_result = BasicActorRef::from(my_actor1).try_tell(Protocol::StartListening(StartListening{host:"Hello my actor!".to_string()}),None);
-    my_actor2.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(my_actor1_2)}), None);
+    let _zmq_listner_result = BasicActorRef::from(zmq_actor).try_tell(Protocol::StartListening(StartListening{host:"Hello my actor!".to_string()}),None);
+    indexing_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(my_actor1_2)}), None);
   //  my_actor1_2.tell(ZMQListenerMsg::StartListening(StartListening{host:"Hello my actor!".to_string()}), None);
 
     //std::thread::sleep(time::Duration::from_millis(2500));

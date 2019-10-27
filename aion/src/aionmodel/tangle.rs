@@ -1,4 +1,5 @@
 use aionmodel::transaction::*;
+use crate::SETTINGS;
 use std::{
     collections::{HashMap, VecDeque, hash_map::DefaultHasher},
     hash::{Hash, Hasher, BuildHasherDefault, BuildHasher},
@@ -12,9 +13,7 @@ pub struct Tangle {
 }
 
 
-impl Tangle {
-
-  
+impl Tangle {  
 
     pub fn maintain(&mut self) {
         while self.txs_ages.len() > self.max_txs {
@@ -43,11 +42,10 @@ impl Tangle {
 
 impl Default for Tangle {
     fn default() -> Self {
-        let test = 2 ^ 14;
         Self {
             txs: HashMap::default(),
             txs_ages: VecDeque::default(),
-            max_txs: usize::pow(2, 12) //TODO get from config
+            max_txs: SETTINGS.cache_settings.local_tangle_max_transactions //TODO get from config
         }
     }
 }

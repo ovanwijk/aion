@@ -1,6 +1,7 @@
 pub mod zmqlistener;
 pub mod timewarpindexing;
 pub mod timewarpwalker;
+use indexstorage;
 
 #[derive(Clone, Debug)]
 pub enum Protocol {
@@ -10,7 +11,10 @@ pub enum Protocol {
     PullTxData(zmqlistener::PullTxData),
     StartListening(zmqlistener::StartListening),
     NewTransaction(zmqlistener::NewTransaction),
-    RegisterZMQListener(timewarpindexing::RegisterZMQListener)
+    RegisterZMQListener(timewarpindexing::RegisterZMQListener),
+    AddToIndexPersistence(indexstorage::TimewarpIndexEntry),
+    GetFromIndexPersistence(u64),
+    RemoveFromIndexPersistence(indexstorage::TimewarpIndexEntry)
 }
 
 pub struct Timewarp {

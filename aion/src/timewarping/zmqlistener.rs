@@ -5,7 +5,7 @@ use zmq::*;
 use std::collections::LinkedList;
 use riker::actors::*;
 use riker::actors::Context;
-
+use std::time::Duration;
 use aionmodel::transaction::*;
 use timewarping::Protocol;
 
@@ -93,26 +93,22 @@ impl ZMQListener {
                 _ctx: &Context<Protocol>,
                 _msg: PullTxData,
                 _sender: Sender) {
-       //  println!("pulling data");
-       // let mut counter = 0;
-        
-        
-            let msg = self.socket.recv_msg(zmq::DONTWAIT);
-            if msg.is_ok() {
-                let msg = msg.unwrap();
-                let msg_string = msg.as_str().unwrap();
-
-                let tx_ = parse_zmqtransaction(&msg_string.to_string());
-                //let routees = ;
-                for routee in &self.routees {
-                    //let nTx = ;
-                    routee.try_tell(Protocol::NewTransaction(NewTransaction{tx: tx_.clone()}), None);
-                    //routee.
-                }
-                //println!("test {}", msg_string);
+        let msg = self.socket.recv_msg(zmq::DONTWAIT);
+        if msg.is_ok() {
+            let msg = msg.unwrap();
+            let msg_string = msg.as_str().unwrap();
+            let tx_ = parse_zmqtransaction(&msg_string.to_string());
+            for routee in &self.routees {
+                routee.try_tell(Protocol::NewTransaction(NewTransaction{tx: tx_.clone()}), None);                
             }
+    
             _ctx.myself().tell(Protocol::PullTxData(PullTxData), None);
-        //println!("Got start listening {}", _msg.host);
+        }else{
+             //Let it chill a bit otherwise it acts like a infinate loop cause 100% cpu
+             let delay = Duration::from_millis(20);
+            _ctx.schedule_once(delay, _ctx.myself(), None, Protocol::PullTxData(PullTxData));
+           
+        }            
     }
 
     pub fn props() -> BoxActorProd<ZMQListener> {

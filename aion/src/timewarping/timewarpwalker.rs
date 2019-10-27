@@ -5,7 +5,7 @@ use riker::actors::*;
 use riker::actors::Context;
 use std::convert::TryInto;
 use timewarping::Protocol;
-
+use crate::SETTINGS;
 //use iota_client::options::;
 use iota_lib_rs::prelude::*;
 use iota_lib_rs::iota_client::*;
@@ -19,9 +19,7 @@ use std::str::FromStr;
 pub struct StartTimewarpWalking {
     pub target_hash: String,
     pub source_timestamp: usize,
-    pub trunk_or_branch: bool,
-    pub warp_step: usize,
-    pub warp_error: f32,
+    pub trunk_or_branch: bool
 }
 
 
@@ -76,6 +74,7 @@ impl TimewarpWalker {
             
 
             let result = self.walk(_msg);
+            println!("Found timewalk with depth: {}", result.len());
     }
 
     fn walk(&mut self, timewalk:StartTimewarpWalking) -> LinkedList<WarpWalk>{
@@ -83,7 +82,7 @@ impl TimewarpWalker {
         let mut timestamp = timewalk.source_timestamp.clone();
         let mut iota = iota_client::Client::new("http://localhost:14265"); 
         let mut finished = false;   
-        let mut to_return = LinkedList::new();    
+        let mut to_return:LinkedList<WarpWalk> = LinkedList::new();    
 
       
         while finished == false {
@@ -92,12 +91,13 @@ impl TimewarpWalker {
                let tx_trytes = &result.unwrap_or_default().take_trytes().unwrap_or_default()[0];
                let tx:Transaction = tx_trytes.parse().unwrap_or_default();
                if tx.hash != "999999999999999999999999999999999999999999999999999999999999999999999999999999999" {
-                    let lower_bound: usize = timestamp - (timewalk.warp_step as f32 * (1.0 + timewalk.warp_error)) as usize;
-                    let upper_bound: usize = timestamp - (timewalk.warp_step as f32 * (1.0 - timewalk.warp_error)) as usize;
-                    if tx.timestamp as usize >= lower_bound && tx.timestamp as usize <= upper_bound {
+
+                    let diff = timestamp - tx.timestamp as usize;
+                    if diff >= SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds 
+                        && diff <= SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds {
                         
                         to_return.push_back(WarpWalk{
-                            distance: timestamp - tx.timestamp as usize,
+                            distance: diff,
                             target: txid.clone(),
                             trunk_or_branch: timewalk.trunk_or_branch
                         });
@@ -118,8 +118,7 @@ impl TimewarpWalker {
            }
         }
 
-        to_return
-       
+        to_return      
   
     }
 
