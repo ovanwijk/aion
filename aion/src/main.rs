@@ -11,6 +11,10 @@ extern crate serde_json;
 extern crate riker;
 extern crate iota_lib_rs;
 extern crate rocksdb;
+extern crate lru_cache;
+#[macro_use] extern crate log;
+extern crate env_logger;
+
 
 mod timewarping;
 mod aionmodel;
@@ -35,6 +39,9 @@ use serde_derive::{Deserialize, Serialize};
 //    format!("Hello {}! id:{}", info.1, info.0)
 //}
 
+pub const STORAGE_ACTOR:&str = "storage-actor";
+pub const ZMQ_LISTENER_ACTOR:&str = "zmq-actor";
+pub const TIMEWARP_INDEXING_ACTOR:&str = "timewarp-actor";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct AppSettings {
@@ -55,6 +62,7 @@ pub struct NodeSettings {
 #[derive(Clone, Debug, Deserialize)]
 pub struct CacheSettings {
     local_tangle_max_transactions: usize,
+    db_memory_cache: usize
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -86,7 +94,8 @@ lazy_static! {
                     zmq_port: lconfig["nodes"]["zmq_port"].as_i64().unwrap() as usize
                 },
                 cache_settings: CacheSettings{
-                    local_tangle_max_transactions: lconfig["caching"]["local_tangle_max_transactions"].as_i64().unwrap() as usize
+                    local_tangle_max_transactions: lconfig["caching"]["local_tangle_max_transactions"].as_i64().unwrap() as usize,
+                    db_memory_cache: 24000
                 },
                 timewarp_index_settings: TimewarpIndexSettings {
                     detection_threshold_min_timediff_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_min_timediff_in_seconds"].as_i64().unwrap() as usize,
@@ -101,8 +110,11 @@ lazy_static! {
     };
 }
 fn main() {
+    env_logger::init();
     let args: Vec<String> = env::args().collect();
-    println!("{:?}", args);
+    info!("{:?}", args);
+    debug!("test");
+    println!("{}", std::env::var("RUST_LOG").unwrap_or_default());
     let mut config_file = "./config.conf";
     if args.len() == 2 {
         config_file = &args[1];
@@ -129,13 +141,14 @@ fn main() {
     let sys = ActorSystem::new().unwrap();
     
     
-    let zmq_actor = sys.actor_of(ZMQListener::props(), "zmq-listener").unwrap();
+    let zmq_actor = sys.actor_of(ZMQListener::props(), ZMQ_LISTENER_ACTOR).unwrap();
     let my_actor1_2 = zmq_actor.clone(); 
-    let indexing_actor = sys.actor_of(TimewarpIndexing::props(), "timewarp-indexing").unwrap();
-    let storage_actor = sys.actor_of(RocksDBProvider::props(), "index-storage").unwrap();
+     let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
 
-    let temp_actor = sys.actor_of(TimewarpWalker::props(), "timewarp-walking").unwrap();
+    let indexing_actor = sys.actor_of(TimewarpIndexing::props(BasicActorRef::from(storage_actor.clone())), TIMEWARP_INDEXING_ACTOR).unwrap();
+   
+    let temp_actor = sys.actor_of(TimewarpWalker::props(BasicActorRef::from(storage_actor.clone())), "timewarp-walking").unwrap();
 
     storage_actor.tell(Protocol::AddToIndexPersistence(TimewarpIndexEntry{key: 10, values: vec!["Hallo".to_string(), "world".to_string()]}), None);
     storage_actor.tell(Protocol::GetFromIndexPersistence(10), None);

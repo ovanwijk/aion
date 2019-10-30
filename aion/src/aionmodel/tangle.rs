@@ -1,7 +1,7 @@
 use aionmodel::transaction::*;
 use crate::SETTINGS;
 use std::{
-    collections::{HashMap, VecDeque, hash_map::DefaultHasher},
+    collections::{HashMap, HashSet, VecDeque, hash_map::DefaultHasher},
     hash::{Hash, Hasher, BuildHasherDefault, BuildHasher},
 };
 
@@ -10,6 +10,7 @@ pub struct Tangle {
     pub txs: HashMap<String, Box<Transaction>>,
     pub txs_ages: VecDeque<String>,
     pub max_txs: usize,
+    pub confirmed_txs: HashSet<String>
 }
 
 
@@ -17,7 +18,9 @@ impl Tangle {
 
     pub fn maintain(&mut self) {
         while self.txs_ages.len() > self.max_txs {
-            self.txs.remove(&self.txs_ages.pop_front().unwrap());
+            let popping = &self.txs_ages.pop_front().unwrap();
+            self.txs.remove(popping);
+            self.confirmed_txs.remove(popping);
         }
     }
 
@@ -32,11 +35,14 @@ impl Tangle {
     pub fn contains(&self, txid: String) -> bool {
         self.txs.contains_key(&txid)
     }
+    
+    pub fn is_certainly_confirmed(&self, txid:String) -> bool {
+        self.confirmed_txs.get(&txid).is_some()
+    }
 
     pub fn get(&self, txid: &String) -> Option<&Box<Transaction>> {
         let result = self.txs.get(txid);
-        result
-        
+        result        
     }
 }
 
@@ -45,7 +51,8 @@ impl Default for Tangle {
         Self {
             txs: HashMap::default(),
             txs_ages: VecDeque::default(),
-            max_txs: SETTINGS.cache_settings.local_tangle_max_transactions //TODO get from config
+            max_txs: SETTINGS.cache_settings.local_tangle_max_transactions,
+            confirmed_txs: HashSet::default()
         }
     }
 }

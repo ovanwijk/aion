@@ -74,6 +74,7 @@ impl ZMQListener {
 
         self.socket.connect("tcp://127.0.0.1:5556").unwrap();
         self.socket.set_subscribe("tx ".as_bytes()).unwrap();
+        self.socket.set_subscribe("sn ".as_bytes()).unwrap();
 
         _ctx.myself.tell(Protocol::PullTxData(PullTxData), None);
       
@@ -97,10 +98,17 @@ impl ZMQListener {
         if msg.is_ok() {
             let msg = msg.unwrap();
             let msg_string = msg.as_str().unwrap();
-            let tx_ = parse_zmqtransaction(&msg_string.to_string());
-            for routee in &self.routees {
-                routee.try_tell(Protocol::NewTransaction(NewTransaction{tx: tx_.clone()}), None);                
-            }
+            if msg_string.starts_with("tx "){
+                let tx_ = parse_zmqtransaction(msg_string);
+                for routee in &self.routees {
+                    let _res = routee.try_tell(Protocol::NewTransaction(NewTransaction{tx: tx_.clone()}), None);                
+                }
+            }else if msg_string.starts_with("sn "){
+                let tx_ = parse_zmq_confirmation_transaction(msg_string);
+                for routee in &self.routees {
+                    let _res = routee.try_tell(Protocol::TransactionConfirmed(tx_.to_string()), None);                
+                }
+            }            
     
             _ctx.myself().tell(Protocol::PullTxData(PullTxData), None);
         }else{

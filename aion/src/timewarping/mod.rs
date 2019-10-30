@@ -11,6 +11,7 @@ pub enum Protocol {
     PullTxData(zmqlistener::PullTxData),
     StartListening(zmqlistener::StartListening),
     NewTransaction(zmqlistener::NewTransaction),
+    TransactionConfirmed(String),
     RegisterZMQListener(timewarpindexing::RegisterZMQListener),
     AddToIndexPersistence(indexstorage::TimewarpIndexEntry),
     GetFromIndexPersistence(u64),

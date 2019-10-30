@@ -33,7 +33,8 @@ pub struct WarpWalk {
 #[derive(Debug)]
 pub struct TimewarpWalker {
     start: String,
-    path: LinkedList<WarpWalk>
+    path: LinkedList<WarpWalk>,
+    storage_actor:BasicActorRef
 }
 
 impl Actor for TimewarpWalker {
@@ -58,14 +59,15 @@ impl Actor for TimewarpWalker {
 
 
 impl TimewarpWalker {
-    fn actor() -> Self {        
+    fn actor(storage_actor:BasicActorRef) -> Self {        
         TimewarpWalker {
             start: "".to_string(),
-            path: LinkedList::new()
+            path: LinkedList::new(),
+            storage_actor: storage_actor
         }
     }
-     pub fn props() -> BoxActorProd<TimewarpWalker> {
-        Props::new(TimewarpWalker::actor)
+     pub fn props(storage_actor:BasicActorRef) -> BoxActorProd<TimewarpWalker> {
+        Props::new_args(TimewarpWalker::actor, storage_actor)
     }
     fn receive_startwalking(&mut self,
                 _ctx: &Context<Protocol>,
@@ -94,7 +96,7 @@ impl TimewarpWalker {
 
                     let diff = timestamp - tx.timestamp as usize;
                     if diff >= SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds 
-                        && diff <= SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds {
+                        && diff <= SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
                         
                         to_return.push_back(WarpWalk{
                             distance: diff,

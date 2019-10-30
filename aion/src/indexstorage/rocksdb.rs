@@ -4,11 +4,13 @@ use riker::actors::*;
 use riker::actors::Context;
 use std::convert::TryInto;
 use timewarping::Protocol;
+ use std::cell::RefCell;
 use indexstorage::{TimewarpIndexEntry, IndexPersistence};
 use crate::SETTINGS;
 use rocksdb::{DB, Options, ColumnFamily};
 use std::{
     collections::{HashMap, HashSet}};
+use lru_cache::LruCache;
 
 const RANGE_INDEX_COLUMN:&str = "RANGE_INDEX_COLUMN";
 const KEY_INDEX_COLUMN:&str = "KEY_INDEX_COLUMN";
@@ -25,7 +27,8 @@ impl TimewarpIndexEntry {
 
 
 pub struct RocksDBProvider {
-    provider: DB
+    provider: DB,
+    cache: RefCell<LruCache<u64, HashSet<String>> >
 }
 
 impl Actor for RocksDBProvider {
@@ -58,19 +61,27 @@ impl  IndexPersistence for RocksDBProvider {
         if !data.is_empty() {
             let concatted = data.iter().fold(String::from(""), |mut a, b| {a.push_str(","); a.push_str(b ); a})[1..].to_string();
             let _r = self.provider.put_cf(handle, key.to_be_bytes(), concatted.as_bytes());
+            self.cache.borrow_mut().insert(key, data);
         }
         
     }
     fn remove_from_index(&self, key:u64, values:Vec<String>){}
     fn get(&self, key:u64) -> HashSet<String> {
-        let handle = self.provider.cf_handle(RANGE_INDEX_COLUMN).unwrap();
-       
-        match self.provider.get_cf(handle, key.to_be_bytes()) {
-            Ok(Some(value)) => TimewarpIndexEntry::from_vec_u8(value.to_utf8().unwrap().to_string()),
-            Ok(None) => HashSet::new(),
-            Err(e) => {println!("operational problem encountered: {}", e);
-            HashSet::new()},
-            _ => HashSet::new()
+        let mut borrowed_cached = self.cache.borrow_mut();
+        let cached = borrowed_cached.get_mut(&key);
+        if cached.is_some() {
+            let result = cached.unwrap();
+            result.clone()
+        }else { 
+            let handle = self.provider.cf_handle(RANGE_INDEX_COLUMN).unwrap();
+
+            match self.provider.get_cf(handle, key.to_be_bytes()) {
+                Ok(Some(value)) => TimewarpIndexEntry::from_vec_u8(value.to_utf8().unwrap().to_string()),
+                Ok(None) => HashSet::new(),
+                Err(e) => {println!("operational problem encountered: {}", e);
+                HashSet::new()},
+                _ => HashSet::new()
+            }
         }
        
     }
@@ -86,7 +97,8 @@ impl RocksDBProvider {
         let db = DB::open_cf(&db_opts, path, vec![RANGE_INDEX_COLUMN, KEY_INDEX_COLUMN]).unwrap();       
         
         RocksDBProvider {
-            provider: db
+            provider: db,
+            cache: RefCell::new(LruCache::new(SETTINGS.cache_settings.db_memory_cache))
         }
     }
     fn receive_addtoindex(&mut self,

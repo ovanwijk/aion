@@ -8,6 +8,7 @@ use std::{
 };
 use std::collections::LinkedList;
 use crate::SETTINGS;
+use crate::STORAGE_ACTOR;
 use riker::actors::*;
 use riker::actors::Context;
 use aionmodel::transaction::*;
@@ -30,6 +31,7 @@ pub struct TimewarpIndexing {
     pub tangle:Tangle,
     avg_count: i64,
     avg_distance: f64,
+    storage_actor: BasicActorRef
     
 }
 
@@ -46,6 +48,7 @@ impl Actor for TimewarpIndexing {
          match msg {
             Protocol::RegisterZMQListener(__msg) => self.receive_registerzmqlistener(ctx, __msg, sender),
             Protocol::NewTransaction(__msg) => self.receive_newtransaction(ctx, __msg, sender),
+            Protocol::TransactionConfirmed(__msg) => self.receive_transactionconfimation(ctx, __msg, sender),
             _ => ()
         }
     }
@@ -76,7 +79,7 @@ impl TimewarpIndexing {
             }
 
         }
-        println!("AVG Timeleap {}", self.avg_distance);  
+       // println!("AVG Timeleap {}", self.avg_distance);  
     }
 
     fn detect_timewarp(&mut self, tx:&Transaction) -> Option<Timewarp>{
@@ -121,13 +124,14 @@ impl TimewarpIndexing {
  * Actor receive messages
  */
 impl TimewarpIndexing {
-    fn actor() -> Self {   
+    fn actor(storage_actor:BasicActorRef) -> Self {   
         //println!("{:?}{:?}", SETTINGS.node_settings.iri_host.to_string(), " Hello");
         //println!("{:?}", SETTINGS.timewarp_index_settings.detection_threshold_upper_bound_in_seconds);
         TimewarpIndexing {
             tangle: Tangle::default(),
             avg_count: 1,
-            avg_distance: 1000.0 //default 1 second
+            avg_distance: 1000.0 ,//default 1 second
+            storage_actor: storage_actor
         }
     }
      fn receive_newtransaction(&mut self,
@@ -137,21 +141,33 @@ impl TimewarpIndexing {
         let cpy = _msg.tx.clone();
         
         self.tangle.insert(_msg.tx);
-        //self.cal_avarage_timeleap(&cpy);
-        let timewarp = self.detect_timewarp(&cpy);
-        if timewarp.is_some() {
-            let my_actor3 = _ctx.actor_of(TimewarpWalker::props(), &format!("timewarp-walking-{}", self.avg_count)).unwrap();
-            let tw = timewarp.unwrap();
-            println!("Found a timewarp!!!!!");
-
-            my_actor3.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
-                target_hash: tw.to, 
-                source_timestamp: cpy.timestamp as usize, 
-                trunk_or_branch: tw.trunk_or_branch})
-                , None);
-           
-        }
+        self.cal_avarage_timeleap(&cpy);       
         self.tangle.maintain();
+    }
+
+    fn receive_transactionconfimation(&mut self,
+                _ctx: &Context<Protocol>,
+                _msg: String,
+                _sender: Sender) {
+        let tx = self.tangle.get(&_msg);
+        if tx.is_some() {
+            let cpy = tx.unwrap().clone();          
+            let timewarp = self.detect_timewarp(&cpy);
+            if timewarp.is_some() {
+            
+                let my_actor3 = _ctx.actor_of(TimewarpWalker::props(self.storage_actor.clone()), &format!("timewarp-walking-{}", self.avg_count)).unwrap();
+                let tw = timewarp.unwrap();
+                println!("Found a timewarp!!!!!");
+
+                my_actor3.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
+                    target_hash: tw.to, 
+                    source_timestamp: cpy.timestamp as usize, 
+                    trunk_or_branch: tw.trunk_or_branch})
+                    , None);
+            
+            }
+        }
+        
         //println!("Receiving transaction {}", _msg.tx.id);               
     }
 
@@ -165,8 +181,8 @@ impl TimewarpIndexing {
         println!("Registering {:?}", res);
     }
 
-    pub fn props() -> BoxActorProd<TimewarpIndexing> {
-        Props::new(TimewarpIndexing::actor)
+    pub fn props(storage_actor:BasicActorRef) -> BoxActorProd<TimewarpIndexing> {
+        Props::new_args(TimewarpIndexing::actor, storage_actor)
     }
 }
 
