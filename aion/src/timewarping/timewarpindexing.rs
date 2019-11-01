@@ -17,6 +17,10 @@ use timewarping::zmqlistener::*;
 use timewarping::Protocol;
 use timewarping::Timewarp;
 use timewarping::timewarpwalker::*;
+//use std::collections::HashMap;
+use indexstorage::*;
+#[macro_use]
+use log;
 
 
 
@@ -31,7 +35,9 @@ pub struct TimewarpIndexing {
     pub tangle:Tangle,
     avg_count: i64,
     avg_distance: f64,
-    storage_actor: BasicActorRef
+    storage_actor: BasicActorRef,
+    //Map containing TXID as key and TimewarpID as Value
+    known_timewarp_tips: HashMap<String, String>
     
 }
 
@@ -86,7 +92,7 @@ impl TimewarpIndexing {
         let branch_step = self.tangle.get(&tx.branch);
         
         if branch_step.is_some() {
-            let diff = (tx.timestamp - branch_step.unwrap().timestamp) as usize;
+            let diff = (tx.timestamp - branch_step.unwrap().timestamp);
             if diff > 0 && 
                 diff > SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds &&
                 diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds { //Filterout direct references through bundes
@@ -101,7 +107,7 @@ impl TimewarpIndexing {
         }
         let trunk_step = self.tangle.get(&tx.trunk);
         if trunk_step.is_some() {
-            let diff = (tx.timestamp - trunk_step.unwrap().timestamp) as usize;
+            let diff = (tx.timestamp - trunk_step.unwrap().timestamp);
             if diff > 0 && 
                 diff > SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds &&
                 diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds { //Filterout direct references through bundes
@@ -131,7 +137,8 @@ impl TimewarpIndexing {
             tangle: Tangle::default(),
             avg_count: 1,
             avg_distance: 1000.0 ,//default 1 second
-            storage_actor: storage_actor
+            storage_actor: storage_actor,
+            known_timewarp_tips: HashMap::new()
         }
     }
      fn receive_newtransaction(&mut self,
@@ -154,16 +161,29 @@ impl TimewarpIndexing {
             let cpy = tx.unwrap().clone();          
             let timewarp = self.detect_timewarp(&cpy);
             if timewarp.is_some() {
-            
-                let my_actor3 = _ctx.actor_of(TimewarpWalker::props(self.storage_actor.clone()), &format!("timewarp-walking-{}", self.avg_count)).unwrap();
                 let tw = timewarp.unwrap();
-                println!("Found a timewarp!!!!!");
+                if self.known_timewarp_tips.get(&tw.to).is_some() {
+                    info!("Found a known timewarp");
+                    self.known_timewarp_tips.remove(&tw.to);
+                    self.known_timewarp_tips.insert(tw.from.to_string(), tw.to.to_string());
+                    let _res = self.storage_actor.try_tell(Protocol::AddToIndexPersistence(
+                        get_time_key(cpy.timestamp),
+                        vec![(tw.from, tw.to)]
+                    ), None);
+                }else{
+                    let my_actor3 = _ctx.actor_of(TimewarpWalker::props(self.storage_actor.clone()), &format!("timewarp-walking-{}", self.avg_count)).unwrap();
+                    
+                    info!("Found a new timewarp!!!!!, start following");
 
-                my_actor3.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
-                    target_hash: tw.to, 
-                    source_timestamp: cpy.timestamp as usize, 
-                    trunk_or_branch: tw.trunk_or_branch})
-                    , None);
+                    my_actor3.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
+                        target_hash: tw.to, 
+                        source_timestamp: cpy.timestamp, 
+                        trunk_or_branch: tw.trunk_or_branch})
+                        , Some(BasicActorRef::from(_ctx.myself())));
+                }
+                
+            
+                
             
             }
         }

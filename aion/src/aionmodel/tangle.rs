@@ -9,7 +9,7 @@ use std::{
 pub struct Tangle {
     pub txs: HashMap<String, Box<Transaction>>,
     pub txs_ages: VecDeque<String>,
-    pub max_txs: usize,
+    pub max_txs: i64,
     pub confirmed_txs: HashSet<String>
 }
 
@@ -17,7 +17,7 @@ pub struct Tangle {
 impl Tangle {  
 
     pub fn maintain(&mut self) {
-        while self.txs_ages.len() > self.max_txs {
+        while self.txs_ages.len() > self.max_txs as usize {
             let popping = &self.txs_ages.pop_front().unwrap();
             self.txs.remove(popping);
             self.confirmed_txs.remove(popping);

@@ -12,6 +12,7 @@ extern crate riker;
 extern crate iota_lib_rs;
 extern crate rocksdb;
 extern crate lru_cache;
+extern crate bincode;
 #[macro_use] extern crate log;
 extern crate env_logger;
 
@@ -28,7 +29,7 @@ use hocon::HoconLoader;
 use std::*;
 use json::JsonValue;
 use indexstorage::rocksdb::RocksDBProvider;
-use indexstorage::TimewarpIndexEntry;
+use indexstorage::RangeTxIDLookup;
 use timewarping::zmqlistener::*;
 use timewarping::timewarpindexing::*;
 use timewarping::timewarpwalker::*;
@@ -61,16 +62,16 @@ pub struct NodeSettings {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CacheSettings {
-    local_tangle_max_transactions: usize,
-    db_memory_cache: usize
+    local_tangle_max_transactions: i64,
+    db_memory_cache: i64
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct TimewarpIndexSettings {
-    detection_threshold_min_timediff_in_seconds: usize,
-    detection_threshold_max_timediff_in_seconds: usize,
-    time_index_clustering_in_seconds: usize,
-    time_index_max_length_in_seconds: usize,
+    detection_threshold_min_timediff_in_seconds: i64,
+    detection_threshold_max_timediff_in_seconds: i64,
+    time_index_clustering_in_seconds: i64,
+    time_index_max_length_in_seconds: i64,
     time_index_database_location: String
 }
 
@@ -94,14 +95,14 @@ lazy_static! {
                     zmq_port: lconfig["nodes"]["zmq_port"].as_i64().unwrap() as usize
                 },
                 cache_settings: CacheSettings{
-                    local_tangle_max_transactions: lconfig["caching"]["local_tangle_max_transactions"].as_i64().unwrap() as usize,
+                    local_tangle_max_transactions: lconfig["caching"]["local_tangle_max_transactions"].as_i64().unwrap() ,
                     db_memory_cache: 24000
                 },
                 timewarp_index_settings: TimewarpIndexSettings {
-                    detection_threshold_min_timediff_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_min_timediff_in_seconds"].as_i64().unwrap() as usize,
-                    detection_threshold_max_timediff_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_max_timediff_in_seconds"].as_i64().unwrap() as usize,
-                    time_index_clustering_in_seconds: lconfig["timewarp_indexing"]["time_index_clustering_in_seconds"].as_i64().unwrap() as usize,
-                    time_index_max_length_in_seconds: lconfig["timewarp_indexing"]["time_index_max_length_in_seconds"].as_i64().unwrap() as usize,
+                    detection_threshold_min_timediff_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_min_timediff_in_seconds"].as_i64().unwrap() ,
+                    detection_threshold_max_timediff_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_max_timediff_in_seconds"].as_i64().unwrap() ,
+                    time_index_clustering_in_seconds: lconfig["timewarp_indexing"]["time_index_clustering_in_seconds"].as_i64().unwrap(),
+                    time_index_max_length_in_seconds: lconfig["timewarp_indexing"]["time_index_max_length_in_seconds"].as_i64().unwrap(),
                     time_index_database_location: lconfig["timewarp_indexing"]["time_index_database_location"].as_string().unwrap()
                 }
             }
@@ -150,7 +151,7 @@ fn main() {
    
     let temp_actor = sys.actor_of(TimewarpWalker::props(BasicActorRef::from(storage_actor.clone())), "timewarp-walking").unwrap();
 
-    storage_actor.tell(Protocol::AddToIndexPersistence(TimewarpIndexEntry{key: 10, values: vec!["Hallo".to_string(), "world".to_string()]}), None);
+    //storage_actor.tell(Protocol::AddToIndexPersistence(TimewarpIndexEntry{key: 10, values: vec!["Hallo".to_string(), "world".to_string()]}), None);
     storage_actor.tell(Protocol::GetFromIndexPersistence(10), None);
     
     // temp_actor.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
