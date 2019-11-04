@@ -28,7 +28,10 @@ impl Tangle {
          if !self.contains(tx.id.to_string()) {
             self.txs_ages.push_back(tx.id.to_string());
             self.txs.insert(tx.id.to_string(), Box::new(tx));
-            println!("Got transactions {}", self.txs.len());    
+            if self.txs.len() % 100 == 0{
+                println!("Got transactions {}", self.txs.len());    
+            }
+            
          } 
     }
 

@@ -27,9 +27,10 @@ use actix_web::{web, App, HttpServer, HttpRequest, HttpResponse, Responder};
 use riker::actors::*;
 use hocon::HoconLoader;
 use std::*;
+use std::sync::Arc;
 use json::JsonValue;
 use indexstorage::rocksdb::RocksDBProvider;
-use indexstorage::RangeTxIDLookup;
+use indexstorage::{RangeTxIDLookup, Persistence};
 use timewarping::zmqlistener::*;
 use timewarping::timewarpindexing::*;
 use timewarping::timewarpwalker::*;
@@ -139,20 +140,22 @@ fn main() {
 
     lazy_static::initialize(&SETTINGS);
 
+    let storage:Arc<dyn Persistence> = Arc::new(RocksDBProvider::new());
+
     let sys = ActorSystem::new().unwrap();
     
     
     let zmq_actor = sys.actor_of(ZMQListener::props(), ZMQ_LISTENER_ACTOR).unwrap();
     let my_actor1_2 = zmq_actor.clone(); 
-     let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
+   //  let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
 
-    let indexing_actor = sys.actor_of(TimewarpIndexing::props(BasicActorRef::from(storage_actor.clone())), TIMEWARP_INDEXING_ACTOR).unwrap();
+    let indexing_actor = sys.actor_of(TimewarpIndexing::props(storage.clone()), TIMEWARP_INDEXING_ACTOR).unwrap();
    
-    let temp_actor = sys.actor_of(TimewarpWalker::props(BasicActorRef::from(storage_actor.clone())), "timewarp-walking").unwrap();
+    let temp_actor = sys.actor_of(TimewarpWalker::props(storage.clone()), "timewarp-walking").unwrap();
 
     //storage_actor.tell(Protocol::AddToIndexPersistence(TimewarpIndexEntry{key: 10, values: vec!["Hallo".to_string(), "world".to_string()]}), None);
-    storage_actor.tell(Protocol::GetFromIndexPersistence(10), None);
+   // storage_actor.tell(Protocol::GetFromIndexPersistence(10), None);
     
     // temp_actor.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
     //     target_hash: "LRYSLAXS9ZJYMQ9ENALNCRNUJBIFNVJTEOILGMJVJAMPYH9EBQBPGDXPTCZUR9ATTYZBANMPQIDTWNNK9".to_string(), 
