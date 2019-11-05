@@ -66,7 +66,7 @@ impl Actor for TimewarpWalker {
 
         // Use the respective Receive<T> implementation
         match msg {
-            Protocol::StartTimewarpWalking(__msg) => self.receive_startwalking(ctx, __msg, sender)
+            Protocol::StartTimewarpWalking(__msg) => self.receive_startwalking(ctx, __msg, sender),
             _ => ()
         }
     }

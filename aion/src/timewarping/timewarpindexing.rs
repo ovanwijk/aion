@@ -35,7 +35,7 @@ pub struct TimewarpIndexing {
     pub tangle:Tangle,
     avg_count: i64,
     avg_distance: f64,
-    storage_actor: Arc<dyn Persistence>,
+    storage: Arc<dyn Persistence>,
     //Map containing TXID as key and TimewarpID as Value
     known_timewarp_tips: HashMap<String, String>
     
@@ -130,12 +130,12 @@ impl TimewarpIndexing {
  * Actor receive messages
  */
 impl TimewarpIndexing {
-    fn actor(storage_actor:Arc<dyn Persistence>) -> Self {   
+    fn actor(storage:Arc<dyn Persistence>) -> Self {   
         TimewarpIndexing {
             tangle: Tangle::default(),
             avg_count: 1,
             avg_distance: 1000.0 ,//default 1 second
-            storage_actor: storage_actor,
+            storage: storage,
             known_timewarp_tips: HashMap::new()
         }
     }
@@ -169,15 +169,15 @@ impl TimewarpIndexing {
                     info!("Found a known timewarp Old: {} and new {}", tw.to.to_string(), tw.from.to_string());
                     self.known_timewarp_tips.remove(&tw.to);
                     self.known_timewarp_tips.insert(tw.from.to_string(), tw.to.to_string());
-                    self.storage_actor.tw_detection_add_to_index(get_time_key(&cpy.timestamp),
+                    self.storage.tw_detection_add_to_index(get_time_key(&cpy.timestamp),
                         vec![(tw.from, tw.to)]);
-                    // let _res = self.storage_actor.try_tell(Protocol::AddToIndexPersistence(
+                    // let _res = self.storage.try_tell(Protocol::AddToIndexPersistence(
                        
                     // ), None);
                 }else{
                     self.known_timewarp_tips.insert(tw.from.to_string(), tw.to.to_string());
                     info!("Found a new timewarp!!!!!, start following{}-{}", tw.from.to_string(), tw.to.to_string());
-                    let my_actor3 = _ctx.actor_of(TimewarpWalker::props(self.storage_actor.clone()), &format!("timewarp-walking-{}", tw.from.to_string())).unwrap();
+                    let my_actor3 = _ctx.actor_of(TimewarpWalker::props(self.storage.clone()), &format!("timewarp-walking-{}", tw.from.to_string())).unwrap();
                     
                     
 
@@ -203,8 +203,8 @@ impl TimewarpIndexing {
         println!("Registering {:?}", res);
     }
 
-    pub fn props(storage_actor:Arc<dyn Persistence>) -> BoxActorProd<TimewarpIndexing> {
-        Props::new_args(TimewarpIndexing::actor, storage_actor)
+    pub fn props(storage:Arc<dyn Persistence>) -> BoxActorProd<TimewarpIndexing> {
+        Props::new_args(TimewarpIndexing::actor, storage)
     }
 }
 
