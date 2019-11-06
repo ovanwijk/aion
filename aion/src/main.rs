@@ -71,6 +71,7 @@ pub struct CacheSettings {
 pub struct TimewarpIndexSettings {
     detection_threshold_min_timediff_in_seconds: i64,
     detection_threshold_max_timediff_in_seconds: i64,
+    detection_threshold_switch_timewarp_in_seconds: i64,
     time_index_clustering_in_seconds: i64,
     time_index_max_length_in_seconds: i64,
     time_index_database_location: String
@@ -102,6 +103,7 @@ lazy_static! {
                 timewarp_index_settings: TimewarpIndexSettings {
                     detection_threshold_min_timediff_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_min_timediff_in_seconds"].as_i64().unwrap() ,
                     detection_threshold_max_timediff_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_max_timediff_in_seconds"].as_i64().unwrap() ,
+                    detection_threshold_switch_timewarp_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_switch_timewarp_in_seconds"].as_i64().unwrap() ,
                     time_index_clustering_in_seconds: lconfig["timewarp_indexing"]["time_index_clustering_in_seconds"].as_i64().unwrap(),
                     time_index_max_length_in_seconds: lconfig["timewarp_indexing"]["time_index_max_length_in_seconds"].as_i64().unwrap(),
                     time_index_database_location: lconfig["timewarp_indexing"]["time_index_database_location"].as_string().unwrap()

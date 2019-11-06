@@ -1,6 +1,7 @@
 pub mod zmqlistener;
 pub mod timewarpindexing;
 pub mod timewarpwalker;
+pub mod signing;
 use serde::{Serialize, Deserialize};
 use indexstorage;
 use std::collections::HashMap;
@@ -10,7 +11,7 @@ pub enum Protocol {
     RegisterRoutee,
     Start,
     StartTimewarpWalking(timewarpwalker::StartTimewarpWalking),
-    TimewarpWalkingResult(String, String),
+    TimewarpWalkingResult(Vec<indexstorage::WarpWalk>),
     PullTxData(zmqlistener::PullTxData),
     StartListening(zmqlistener::StartListening),
     NewTransaction(zmqlistener::NewTransaction),

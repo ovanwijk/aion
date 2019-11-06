@@ -37,8 +37,8 @@ pub struct TimewarpIndexing {
     avg_distance: f64,
     storage: Arc<dyn Persistence>,
     //Map containing TXID as key and TimewarpID as Value
-    known_timewarp_tips: HashMap<String, String>
-    
+    known_timewarp_tips: HashMap<String, String>,
+    last_picked_tw: Option<TimewarpData>    
 }
 
 impl Actor for TimewarpIndexing {
@@ -130,13 +130,15 @@ impl TimewarpIndexing {
  * Actor receive messages
  */
 impl TimewarpIndexing {
-    fn actor(storage:Arc<dyn Persistence>) -> Self {   
+    fn actor(storage:Arc<dyn Persistence>) -> Self {
+        let last_picked =  &storage.get_last_picked_tw();
         TimewarpIndexing {
             tangle: Tangle::default(),
             avg_count: 1,
             avg_distance: 1000.0 ,//default 1 second
             storage: storage,
-            known_timewarp_tips: HashMap::new()
+            known_timewarp_tips: HashMap::new(),
+            last_picked_tw: last_picked.to_owned()
         }
     }
      fn receive_newtransaction(&mut self,
@@ -165,26 +167,37 @@ impl TimewarpIndexing {
             let timewarp = self.detect_timewarp(&cpy);
             if timewarp.is_some() {
                 let tw = timewarp.unwrap();
+                if self.last_picked_tw.is_some() {
+                    let unwrapped = self.last_picked_tw.as_ref().unwrap();
+                    if unwrapped.source == tw.to {
+                        info!("Found connecting timewarp");
+
+                    }
+                }
                 if self.known_timewarp_tips.get(&tw.to).is_some() {
                     info!("Found a known timewarp Old: {} and new {}", tw.to.to_string(), tw.from.to_string());
                     self.known_timewarp_tips.remove(&tw.to);
                     self.known_timewarp_tips.insert(tw.from.to_string(), tw.to.to_string());
                     self.storage.tw_detection_add_to_index(get_time_key(&cpy.timestamp),
                         vec![(tw.from, tw.to)]);
-                    // let _res = self.storage.try_tell(Protocol::AddToIndexPersistence(
-                       
-                    // ), None);
+                   
                 }else{
                     self.known_timewarp_tips.insert(tw.from.to_string(), tw.to.to_string());
                     info!("Found a new timewarp!!!!!, start following{}-{}", tw.from.to_string(), tw.to.to_string());
                     let my_actor3 = _ctx.actor_of(TimewarpWalker::props(self.storage.clone()), &format!("timewarp-walking-{}", tw.from.to_string())).unwrap();
                     
-                    
-
                     my_actor3.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
                         target_hash: tw.to, 
                         source_timestamp: cpy.timestamp, 
-                        trunk_or_branch: tw.trunk_or_branch})
+                        trunk_or_branch: tw.trunk_or_branch,
+                        last_picked_tw_tx: {
+                           if self.last_picked_tw.is_some() {
+                                let r = &self.last_picked_tw.as_ref().unwrap().source;
+                                r.to_owned()
+                           }else{
+                                String::from("")
+                           }
+                        }})
                         , Some(BasicActorRef::from(_ctx.myself())));
                 }
             }

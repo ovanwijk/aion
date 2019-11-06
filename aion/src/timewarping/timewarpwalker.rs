@@ -7,6 +7,7 @@ use riker::actors::*;
 use riker::actors::Context;
 use std::convert::TryInto;
 use timewarping::Protocol;
+use indexstorage::WarpWalk;
 use crate::SETTINGS;
 use indexstorage::{get_time_key, Persistence};
 //use iota_client::options::;
@@ -23,7 +24,8 @@ use std::collections::HashMap;
 pub struct StartTimewarpWalking {
     pub target_hash: String,
     pub source_timestamp: i64,
-    pub trunk_or_branch: bool
+    pub trunk_or_branch: bool,
+    pub last_picked_tw_tx: String
 }
 
 impl Default for StartTimewarpWalking {
@@ -31,20 +33,12 @@ impl Default for StartTimewarpWalking {
         StartTimewarpWalking{
             target_hash:String::from(""),
             source_timestamp:0,
-            trunk_or_branch:false
+            trunk_or_branch:false,
+            last_picked_tw_tx: String::from("")
         }
     }
 }
 
-
-#[derive(Clone, Debug)]
-pub struct WarpWalk {
-    from: String,
-    timestamp: i64,
-    distance: i64,
-    trunk_or_branch:bool,
-    target: String
-}
 
 #[derive(Debug)]
 pub struct TimewarpWalker {
@@ -96,20 +90,23 @@ impl TimewarpWalker {
                 _sender: Sender) {
             
             self.timewarp_state = _msg.clone();
-            self.reply_to = _sender;
-            self.walk(_msg);
+           // self.reply_to = _sender;
+            let result = self.walk(_msg);
+            if _sender.is_some() {
+                let _l = _sender.unwrap().try_tell(Protocol::TimewarpWalkingResult(result), None);
+            }
             _ctx.stop(_ctx.myself());
             //let result = self.walk(_msg);
             //println!("Found timewalk with depth: {}", result.len());
     }
 
 
-    fn walk(&mut self, timewalk:StartTimewarpWalking) -> LinkedList<WarpWalk>{
+    fn walk(&mut self, timewalk:StartTimewarpWalking) -> Vec<WarpWalk>{
         let mut txid = timewalk.target_hash.clone();
         let mut timestamp = timewalk.source_timestamp.clone();
         let mut iota = iota_client::Client::new("http://localhost:14265"); //TODO get from settings
         let mut finished = false;   
-        let mut to_return:LinkedList<WarpWalk> = LinkedList::new();    
+        let mut to_return:Vec<WarpWalk> = Vec::new();    
 
       
         while finished == false {
@@ -123,7 +120,7 @@ impl TimewarpWalker {
                     if diff >= SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds 
                         && diff <= SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
                         
-                        to_return.push_back(WarpWalk{
+                        to_return.push(WarpWalk{
                             from: txid.clone(),
                             timestamp: timestamp,
                             distance: diff,
@@ -133,6 +130,10 @@ impl TimewarpWalker {
 
                         txid = if timewalk.trunk_or_branch {tx.trunk_transaction.clone() } else {tx.branch_transaction.clone()};
                         timestamp = tx.timestamp.clone().try_into().unwrap();
+                        if txid == timewalk.last_picked_tw_tx {
+                            info!("Found last picked timewarp, stopped searching");
+                            finished = true;
+                        }
                         let keys = self.storage_actor.tw_detection_get(&get_time_key(&timestamp));
                         if keys.contains_key(&txid){
                             finished = true;

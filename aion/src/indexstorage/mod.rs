@@ -2,6 +2,7 @@
 use crate::SETTINGS;
 use serde::{Serialize, Deserialize};
 pub mod rocksdb;
+
 use std::marker::{Send, Sync};
 use std::{
     collections::{HashMap, HashSet}};
@@ -27,24 +28,51 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     fn tw_detection_remove_from_index(&self, key:i64, values:HashMap<String, String>);
     fn tw_detection_get(&self, key:&i64) -> HashMap<String, String>;
     fn tw_detection_get_all(&self, keys:Vec<&i64>) -> HashMap<String, String>;
-    fn get_picked_tw_range(&self, key:i64) -> HashMap<String, String>;
-    fn last_picked_tw(&self) -> Option<TimewarpDetectionData>;
-    fn add_last_picked_tw(&self, timewarps:Vec<TimewarpDetectionData>) -> Result<(), String>;
+    fn get_picked_tw_index(&self, key:i64) -> HashMap<String, String>;
+    fn get_last_picked_tw(&self) -> Option<TimewarpData>;
+    fn add_last_picked_tw(&self, timewarps:Vec<TimewarpData>) -> Result<(), String>;
 
 
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TimewarpDetectionData {
-    timewarpid: String,
-    source: String,
-    target: String,
-    distance: i64,
-    trunk_or_branch: bool,
-    timestamp: i64,
-    timestamp_deviation_factor:f64,
-    avg_distance: i64,
-    index_since_id: i64,
+pub struct TimewarpData {
+    pub timewarpid: String,
+    pub source: String,
+    pub target: String,
+    pub distance: i64,
+    pub trunk_or_branch: bool,
+    pub timestamp: i64,
+    pub timestamp_deviation_factor:f64,
+    pub avg_distance: i64,
+    pub index_since_id: i64,
+}
+
+#[derive(Clone, Debug)]
+pub struct WarpWalk {
+    pub from: String,
+    pub timestamp: i64,
+    pub distance: i64,
+    pub trunk_or_branch:bool,
+    pub target: String
+}
+
+
+impl TimewarpData {
+    pub fn advance(&self, new_data:WarpWalk) -> TimewarpData {
+        TimewarpData {
+            timewarpid: self.timewarpid.clone(),
+            source: new_data.from,
+            target: new_data.target,
+            timestamp: new_data.timestamp,
+            timestamp_deviation_factor: -1.0,
+            distance: new_data.distance,
+            index_since_id: self.index_since_id + 1,
+            avg_distance: 0,
+            trunk_or_branch: self.trunk_or_branch
+
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

@@ -33,7 +33,7 @@ pub struct RocksDBProvider {
     provider: DB,
     TW_DETECTION_RANGE_TX_INDEX_COLUMN_cache: Mutex<LruCache<i64, HashMap<String, String>>>,
     FOLLOWED_TW_INDEX_RANGE_COLUMN_cache:  Mutex<LruCache<i64, HashMap<String, String>>>,
-    LAST_PICKED_TW_cache: Mutex<Option<TimewarpDetectionData>>
+    LAST_PICKED_TW_cache: Mutex<Option<TimewarpData>>
 }
 
 
@@ -79,7 +79,7 @@ impl Persistence for RocksDBProvider {
     }
     fn tw_detection_get_all(&self, keys:Vec<&i64>) ->HashMap<String, String> {HashMap::new()}
 
-    fn last_picked_tw(&self) -> Option<TimewarpDetectionData> {
+    fn get_last_picked_tw(&self) -> Option<TimewarpData> {
         let cached = self.LAST_PICKED_TW_cache.lock().unwrap();
         if cached.is_some() {
             return Some(cached.as_ref().unwrap().clone());
@@ -92,7 +92,7 @@ impl Persistence for RocksDBProvider {
             Ok(Some(value)) => {
                 let local_result = match self.provider.get_cf(handle, &*value) {
                     Ok(Some(value_two)) => {
-                        let res: Option<TimewarpDetectionData> = bincode::deserialize(&*value_two).unwrap();
+                        let res: Option<TimewarpData> = bincode::deserialize(&*value_two).unwrap();
                         res
                     }
                     Ok(None) => None,
@@ -110,7 +110,7 @@ impl Persistence for RocksDBProvider {
         result
     }
 
-    fn get_picked_tw_range(&self, key:i64) -> HashMap<String, String> {
+    fn get_picked_tw_index(&self, key:i64) -> HashMap<String, String> {
         let mut borrowed_cached = self.FOLLOWED_TW_INDEX_RANGE_COLUMN_cache.lock().unwrap();     
         let cached = borrowed_cached.get_mut(&key);
         if cached.is_some() {
@@ -134,13 +134,13 @@ impl Persistence for RocksDBProvider {
         }
     }
 
-    fn add_last_picked_tw(&self, timewarps: Vec<TimewarpDetectionData>) -> Result<(), String> {
+    fn add_last_picked_tw(&self, timewarps: Vec<TimewarpData>) -> Result<(), String> {
         let handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_COLUMN).unwrap();
         let range_handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_RANGE_COLUMN).unwrap();
         let mut batch = WriteBatch::default();
         let mut cache_updates:HashMap<i64, HashMap<String, String>> = HashMap::new();
         for timewarp in timewarps {
-            let last_tw = self.last_picked_tw();
+            let last_tw = self.get_last_picked_tw();
             if last_tw.is_some() {
                 let unwrapped = last_tw.unwrap();
                 if unwrapped.timestamp > timewarp.timestamp {
@@ -149,7 +149,7 @@ impl Persistence for RocksDBProvider {
                 if unwrapped.source == timewarp.target {
                    
                     let _1 = &batch.put_cf(handle, timewarp.source.as_bytes(), bincode::serialize(&timewarp).unwrap());
-                    let mut range_map = self.get_picked_tw_range(get_time_key(&timewarp.timestamp));
+                    let mut range_map = self.get_picked_tw_index(get_time_key(&timewarp.timestamp));
                     range_map.insert(timewarp.source, timewarp.target);
                     let _2 = &batch.put_cf(range_handle, get_time_key(&timewarp.timestamp).to_be_bytes(), bincode::serialize(&range_map).unwrap());
                     
@@ -159,7 +159,7 @@ impl Persistence for RocksDBProvider {
                 }
             } else {
                 let _l = &batch.put_cf(handle, timewarp.source.as_bytes(), bincode::serialize(&timewarp).unwrap());
-                let mut range_map = self.get_picked_tw_range(get_time_key(&timewarp.timestamp));
+                let mut range_map = self.get_picked_tw_index(get_time_key(&timewarp.timestamp));
                 range_map.insert(timewarp.source, timewarp.target);
                 let _2 = &batch.put_cf(range_handle, get_time_key(&timewarp.timestamp).to_be_bytes(), bincode::serialize(&range_map).unwrap());
                     
