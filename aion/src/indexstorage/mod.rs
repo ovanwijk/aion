@@ -32,8 +32,23 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     fn get_last_picked_tw(&self) -> Option<TimewarpData>;
     fn add_last_picked_tw(&self, timewarps:Vec<TimewarpData>) -> Result<(), String>;
 
+ 
+    fn save_timewarp_state(&self, state: TimewarpIssuingState);
+    fn get_timewarp_state(&self) -> Option<TimewarpIssuingState>;
+
 
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TimewarpIssuingState {
+    pub seed:String,
+    pub original_tx: String,
+    pub latest_tx: String,
+    pub latest_index: i64,
+    pub next_address: String,
+    pub latest_private_key: Vec<i8>
+}
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TimewarpData {

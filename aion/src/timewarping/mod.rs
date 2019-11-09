@@ -2,6 +2,7 @@ pub mod zmqlistener;
 pub mod timewarpindexing;
 pub mod timewarpwalker;
 pub mod signing;
+pub mod timewarpissuing;
 use serde::{Serialize, Deserialize};
 use indexstorage;
 use std::collections::HashMap;

@@ -26,6 +26,7 @@ const PERSISTENT_CACHE:&str = "PERSISTENT_CACHE";
 //Persistent cache keys:
 
 const LAST_PICKED_TW_ID:&str = "LAST_PICKED_TW_ID";
+const TW_ISSUING_STATE:&str = "TW_ISSUING_STATE";
 
 
 #[derive(Debug)]
@@ -38,6 +39,26 @@ pub struct RocksDBProvider {
 
 
 impl Persistence for RocksDBProvider {
+
+   
+    fn save_timewarp_state(&self, state: TimewarpIssuingState) {
+        let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
+        let _r = self.provider.put_cf(handle, TW_ISSUING_STATE.as_bytes(), bincode::serialize(&state).unwrap());
+    }
+    fn get_timewarp_state(&self) -> Option<TimewarpIssuingState> {
+        let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
+        
+        match self.provider.get_cf(handle,  TW_ISSUING_STATE.as_bytes()) {                
+                Ok(Some(value)) => Some(bincode::deserialize(&*value).unwrap()),
+                Ok(None) => None,
+                Err(e) => {println!("operational problem encountered: {}", e);
+                None},
+                _ => None
+        }
+    }
+
+
+
     fn tw_detection_add_to_index(&self, key:i64, values:Vec<(String, String)>) {
         let handle = self.provider.cf_handle(TW_DETECTION_RANGE_TX_INDEX_COLUMN).unwrap();
         let mut data = self.tw_detection_get(&key);
@@ -84,11 +105,11 @@ impl Persistence for RocksDBProvider {
         if cached.is_some() {
             return Some(cached.as_ref().unwrap().clone());
         }
-
+        //TODO recheck persistent cache, where is this stores ?
         let cache_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
         let handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_COLUMN).unwrap();
 
-        let result = match self.provider.get_cf(cache_handle, LAST_PICKED_TW_ID.as_bytes()) {                
+        let result = match self.provider.get_cf(cache_handle, LAST_PICKED_TW_ID.as_bytes()) {
             Ok(Some(value)) => {
                 let local_result = match self.provider.get_cf(handle, &*value) {
                     Ok(Some(value_two)) => {

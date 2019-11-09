@@ -49,7 +49,8 @@ pub const TIMEWARP_INDEXING_ACTOR:&str = "timewarp-actor";
 pub struct AppSettings {
     node_settings: NodeSettings,
     timewarp_index_settings: TimewarpIndexSettings,
-    cache_settings: CacheSettings
+    cache_settings: CacheSettings,
+    timewarp_issuing_settings: TimewarpIssuingSettings,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -65,6 +66,14 @@ pub struct NodeSettings {
 pub struct CacheSettings {
     local_tangle_max_transactions: i64,
     db_memory_cache: i64
+}
+
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct TimewarpIssuingSettings {
+    interval_in_seconds: i64,
+    promote_interval_in_seconds: i64,
+    tip_selection_depth: i64
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -107,6 +116,11 @@ lazy_static! {
                     time_index_clustering_in_seconds: lconfig["timewarp_indexing"]["time_index_clustering_in_seconds"].as_i64().unwrap(),
                     time_index_max_length_in_seconds: lconfig["timewarp_indexing"]["time_index_max_length_in_seconds"].as_i64().unwrap(),
                     time_index_database_location: lconfig["timewarp_indexing"]["time_index_database_location"].as_string().unwrap()
+                },
+                timewarp_issuing_settings: TimewarpIssuingSettings {
+                    interval_in_seconds: lconfig["timewarp_issuing"]["interval_in_seconds"].as_i64().unwrap(),
+                    promote_interval_in_seconds: lconfig["timewarp_issuing"]["promote_interval_in_seconds"].as_i64().unwrap(),
+                    tip_selection_depth: lconfig["timewarp_issuing"]["tip_selection_depth"].as_i64().unwrap()
                 }
             }
             
