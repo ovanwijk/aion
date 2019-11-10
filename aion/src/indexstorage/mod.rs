@@ -44,8 +44,9 @@ pub struct TimewarpIssuingState {
     pub seed:String,
     pub original_tx: String,
     pub latest_tx: String,
+    pub latest_timestamp: i64,
+    pub is_confirmed:bool,
     pub latest_index: i64,
-    pub next_address: String,
     pub latest_private_key: Vec<i8>
 }
 

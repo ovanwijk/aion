@@ -11,17 +11,14 @@ use std::collections::HashMap;
 pub enum Protocol {
     RegisterRoutee,
     Start,
+    Timer,
     StartTimewarpWalking(timewarpwalker::StartTimewarpWalking),
     TimewarpWalkingResult(Vec<indexstorage::WarpWalk>),
     PullTxData(zmqlistener::PullTxData),
     StartListening(zmqlistener::StartListening),
     NewTransaction(zmqlistener::NewTransaction),
     TransactionConfirmed(String),
-    RegisterZMQListener(timewarpindexing::RegisterZMQListener),
-    AddToIndexPersistence(i64, Vec<(String, String)>),
-    GetFromIndexPersistence(i64),
-    GetFromIndexPersistenceResponse(i64, HashMap<String, String>),
-    RemoveFromIndexPersistence(indexstorage::RangeTxIDLookup)
+    RegisterZMQListener(zmqlistener::RegisterZMQListener)
 }
 
 pub struct Timewarp {

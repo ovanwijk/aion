@@ -1,4 +1,5 @@
-use aionmodel::transaction::*;
+//use aionmodel::transaction::*;
+use iota_lib_rs::iota_model::Transaction;
 use crate::SETTINGS;
 use std::{
     collections::{HashMap, HashSet, VecDeque, hash_map::DefaultHasher},
@@ -7,7 +8,7 @@ use std::{
 
 
 pub struct Tangle {
-    pub txs: HashMap<String, Box<Transaction>>,
+    pub txs: HashMap<String, Box<iota_lib_rs::iota_model::Transaction>>,
     pub txs_ages: VecDeque<String>,
     pub max_txs: i64,
     pub confirmed_txs: HashSet<String>
@@ -25,9 +26,9 @@ impl Tangle {
     }
 
     pub fn insert(&mut self, tx: Transaction) {        
-         if !self.contains(tx.id.to_string()) {
-            self.txs_ages.push_back(tx.id.to_string());
-            self.txs.insert(tx.id.to_string(), Box::new(tx));
+         if !self.contains(tx.hash.to_string()) {
+            self.txs_ages.push_back(tx.hash.to_string());
+            self.txs.insert(tx.hash.to_string(), Box::new(tx));
             if self.txs.len() % 100 == 0{
                 println!("Got transactions {}", self.txs.len());    
             }

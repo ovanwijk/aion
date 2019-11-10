@@ -20,12 +20,13 @@
                     "kind": "bin"
                 }
             },
+            
             "env": {
                 "RUST_LOG": "info"
             },
            
           
-            "args": [],
+            "args": ["./config.conf","--timewarp"],
             "cwd": "${workspaceFolder}"
         },
         {

@@ -15,6 +15,10 @@ pub struct StartListening {
     pub host: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct RegisterZMQListener {
+    pub zmq_listener: BasicActorRef
+}
 // #[derive(Clone, Debug)]
 // pub struct RegisterRoutee;
 
@@ -25,7 +29,7 @@ pub struct PullTxData;
 
 #[derive(Clone, Debug)]
 pub struct NewTransaction {
-    pub tx: Transaction
+    pub tx: iota_lib_rs::iota_model::Transaction
 }
 
 
@@ -73,7 +77,7 @@ impl ZMQListener {
         println!("Got start listening {}", _msg.host);
 
         self.socket.connect("tcp://127.0.0.1:5556").unwrap();
-        self.socket.set_subscribe("tx ".as_bytes()).unwrap();
+        self.socket.set_subscribe("tx_trytes ".as_bytes()).unwrap();
         self.socket.set_subscribe("sn ".as_bytes()).unwrap();
 
         _ctx.myself.tell(Protocol::PullTxData(PullTxData), None);
@@ -98,10 +102,13 @@ impl ZMQListener {
         if msg.is_ok() {
             let msg = msg.unwrap();
             let msg_string = msg.as_str().unwrap();
-            if msg_string.starts_with("tx "){
-                let tx_ = parse_zmqtransaction(msg_string);
+            if msg_string.starts_with("tx_trytes "){
+                // let split: Vec<&str> = msg_string.split(" ").collect();
+                // let mut tx: iota_lib_rs::iota_model::Transaction = split[1].parse().unwrap();
+                // tx.hash = String::from(split[2]);
+                let tx = parse_zmqtransaction(msg_string);
                 for routee in &self.routees {
-                    let _res = routee.try_tell(Protocol::NewTransaction(NewTransaction{tx: tx_.clone()}), None);                
+                    let _res = routee.try_tell(Protocol::NewTransaction(NewTransaction{tx: tx.clone()}), None);                
                 }
             }else if msg_string.starts_with("sn "){
                 let tx_ = parse_zmq_confirmation_transaction(msg_string);

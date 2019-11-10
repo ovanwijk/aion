@@ -2,6 +2,7 @@
 use iota_signing::*;
 use iota_conversion::Trinary;
 use iota_constants;
+use iota_utils;
 
 use iota_crypto::{Kerl, Sponge};
 use iota_model::Bundle;
@@ -9,10 +10,10 @@ use iota_constants::HASH_TRINARY_SIZE;
 use std::cmp;
 
 
-pub fn sign_tw_hash(seed:&str, index:usize, tw_hash:&str) -> String {
-    let key_a = key(&seed.trits(), index, 1).unwrap();
+pub fn sign_tw_hash(private_key:&Vec<i8>, tw_hash:&str) -> String {
+    //let key_a = private_key;
     let normalized_hash = Bundle::normalized_bundle(&tw_hash);
-    let signature = signature_fragment(&normalized_hash[0..27], &key_a[0..6561]).unwrap();
+    let signature = signature_fragment(&normalized_hash[0..27], &private_key[0..6561]).unwrap();
     signature.trytes().unwrap()
 }
 
@@ -93,7 +94,7 @@ const TEST_TRUNK: &str =
         println!("Step 2");
         let tw_bundle = calculate_normalized_timewarp_hash(&*address_b, TEST_TRUNK);
         println!("Step 3");
-        let signed = sign_tw_hash(TEST_SEED, 0, &tw_bundle.0);
+        let signed = sign_tw_hash(&key_a, &tw_bundle.0);
         println!("Step 4");
         
         let validated = validate_tw_signature(&address_a, &tw_bundle.0, &signed);

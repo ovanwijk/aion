@@ -15,12 +15,13 @@ extern crate lru_cache;
 extern crate bincode;
 #[macro_use] extern crate log;
 extern crate env_logger;
+extern crate failure;
 
-
+type Result<T> = ::std::result::Result<T, failure::Error>;
 mod timewarping;
 mod aionmodel;
 mod indexstorage;
-
+use std::time::{SystemTime, UNIX_EPOCH};
 use lazy_static::*;
 use iota_lib_rs::*;
 use actix_web::{web, App, HttpServer, HttpRequest, HttpResponse, Responder};
@@ -34,6 +35,7 @@ use indexstorage::{RangeTxIDLookup, Persistence};
 use timewarping::zmqlistener::*;
 use timewarping::timewarpindexing::*;
 use timewarping::timewarpwalker::*;
+use timewarping::timewarpissuing::*;
 
 use timewarping::Protocol;
 use serde_derive::{Deserialize, Serialize};
@@ -44,6 +46,7 @@ use serde_derive::{Deserialize, Serialize};
 pub const STORAGE_ACTOR:&str = "storage-actor";
 pub const ZMQ_LISTENER_ACTOR:&str = "zmq-actor";
 pub const TIMEWARP_INDEXING_ACTOR:&str = "timewarp-actor";
+pub const TIMEWARP_ISSUER_ACTOR:&str = "timewarp-issuer-actor";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct AppSettings {
@@ -73,7 +76,9 @@ pub struct CacheSettings {
 pub struct TimewarpIssuingSettings {
     interval_in_seconds: i64,
     promote_interval_in_seconds: i64,
-    tip_selection_depth: i64
+    tip_selection_depth: i64,
+    minimum_weight_magnitude: i64,
+    trunk_or_branch: bool
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -86,6 +91,12 @@ pub struct TimewarpIndexSettings {
     time_index_database_location: String
 }
 
+
+pub fn now() -> i64 {
+    let start = SystemTime::now();
+    let since_the_epoch = start.duration_since(UNIX_EPOCH);
+    since_the_epoch.unwrap().as_secs() as i64
+}
 // /// This handler uses json extractor
 // fn index(item: web::Json<MyObj>) -> HttpResponse {
 //     println!("model: {:?}", &item);
@@ -120,7 +131,9 @@ lazy_static! {
                 timewarp_issuing_settings: TimewarpIssuingSettings {
                     interval_in_seconds: lconfig["timewarp_issuing"]["interval_in_seconds"].as_i64().unwrap(),
                     promote_interval_in_seconds: lconfig["timewarp_issuing"]["promote_interval_in_seconds"].as_i64().unwrap(),
-                    tip_selection_depth: lconfig["timewarp_issuing"]["tip_selection_depth"].as_i64().unwrap()
+                    tip_selection_depth: lconfig["timewarp_issuing"]["tip_selection_depth"].as_i64().unwrap(), 
+                    minimum_weight_magnitude: lconfig["timewarp_issuing"]["minimum_weight_magnitude"].as_i64().unwrap(),
+                    trunk_or_branch: lconfig["timewarp_issuing"]["trunk_or_branch"].as_bool().unwrap()
                 }
             }
             
@@ -134,16 +147,19 @@ fn main() {
     debug!("test");
     println!("{}", std::env::var("RUST_LOG").unwrap_or_default());
     let mut config_file = "./config.conf";
-    if args.len() == 2 {
+    if args.len() >= 2 {
         config_file = &args[1];
     }
-      let ldr = HoconLoader::new();
-     let fll = ldr.load_file(&config_file);
-        if fll.is_err() {
-            let herror = fll.unwrap_err();
-            println!("{}", herror);
-            return ()
-        }
+    let do_timewarp = &args.contains(&String::from("--timewarp"));
+    if *do_timewarp {info!("Timewarping");}
+
+    let ldr = HoconLoader::new();
+    let fll = ldr.load_file(&config_file);
+    if fll.is_err() {
+        let herror = fll.unwrap_err();
+        println!("{}", herror);
+        return ()
+    }
     unsafe{
         let hcon = fll.unwrap().hocon();
          if hcon.is_err() {
@@ -159,10 +175,10 @@ fn main() {
     let storage:Arc<dyn Persistence> = Arc::new(RocksDBProvider::new());
 
     let sys = ActorSystem::new().unwrap();
-    
+   
     
     let zmq_actor = sys.actor_of(ZMQListener::props(), ZMQ_LISTENER_ACTOR).unwrap();
-    let my_actor1_2 = zmq_actor.clone(); 
+  
    //  let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
 
@@ -179,8 +195,15 @@ fn main() {
     //     trunk_or_branch: false})
     //     , None);
     //{ zmq_listener: BasicActorRef::from(my_actor1.clone())}
+    
+    indexing_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
+    if *do_timewarp {
+        let timewarp_actor = &sys.actor_of(TimewarpIssuer::props(storage.clone()), TIMEWARP_ISSUER_ACTOR).unwrap();
+        &timewarp_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
+        &timewarp_actor.tell(Protocol::Start, None);
+        
+    };
     let _zmq_listner_result = BasicActorRef::from(zmq_actor).try_tell(Protocol::StartListening(StartListening{host:"Hello my actor!".to_string()}),None);
-    indexing_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(my_actor1_2)}), None);
   //  my_actor1_2.tell(ZMQListenerMsg::StartListening(StartListening{host:"Hello my actor!".to_string()}), None);
 
     //std::thread::sleep(time::Duration::from_millis(2500));

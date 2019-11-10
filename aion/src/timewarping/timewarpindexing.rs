@@ -10,7 +10,7 @@ use std::collections::LinkedList;
 use crate::SETTINGS;
 use riker::actors::*;
 use riker::actors::Context;
-use aionmodel::transaction::*;
+use iota_lib_rs::iota_model::Transaction;
 use aionmodel::tangle::*;
 use indexstorage::Persistence;
 use timewarping::zmqlistener::*;
@@ -25,10 +25,6 @@ use std::sync::Arc;
 
 
 
-#[derive(Clone, Debug)]
-pub struct RegisterZMQListener {
-    pub zmq_listener: BasicActorRef
-}
 
 
 pub struct TimewarpIndexing {
@@ -65,7 +61,7 @@ impl Actor for TimewarpIndexing {
  */
 impl TimewarpIndexing {
     fn cal_avarage_timeleap(&mut self, tx:&Transaction){
-        let branch_step = self.tangle.get(&tx.branch);
+        let branch_step = self.tangle.get(&tx.branch_transaction);
         
         if branch_step.is_some() {
             let diff = tx.timestamp - branch_step.unwrap().timestamp;
@@ -75,7 +71,7 @@ impl TimewarpIndexing {
                 
             }
         }
-        let trunk_step = self.tangle.get(&tx.trunk);
+        let trunk_step = self.tangle.get(&tx.trunk_transaction);
          if trunk_step.is_some() {
             let diff = tx.timestamp - trunk_step.unwrap().timestamp;
             if diff > 0 { //Filterout direct references through bundes
@@ -89,7 +85,7 @@ impl TimewarpIndexing {
     }
 
     fn detect_timewarp(&mut self, tx:&Transaction) -> Option<Timewarp>{
-        let branch_step = self.tangle.get(&tx.branch);
+        let branch_step = self.tangle.get(&tx.branch_transaction);
         
         if branch_step.is_some() {
             let diff = tx.timestamp - branch_step.unwrap().timestamp;
@@ -98,14 +94,14 @@ impl TimewarpIndexing {
                 diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
                 //Found branch timewarp
                  return Some(Timewarp{
-                    from: tx.id.clone(),
-                    to: branch_step.unwrap().id.clone(),
+                    from: tx.hash.clone(),
+                    to: branch_step.unwrap().hash.clone(),
                     distance: diff,
                     trunk_or_branch: false
                 })    
             }
         }
-        let trunk_step = self.tangle.get(&tx.trunk);
+        let trunk_step = self.tangle.get(&tx.trunk_transaction);
         if trunk_step.is_some() {
             let diff = tx.timestamp - trunk_step.unwrap().timestamp;
             if diff > 0 && 
@@ -113,8 +109,8 @@ impl TimewarpIndexing {
                 diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
                 //Found trunk timewarp
                 return Some(Timewarp{
-                    from: tx.id.clone(),
-                    to: trunk_step.unwrap().id.clone(),
+                    from: tx.hash.clone(),
+                    to: trunk_step.unwrap().hash.clone(),
                     distance: diff,
                     trunk_or_branch: true
                 })     
