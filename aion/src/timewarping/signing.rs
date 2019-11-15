@@ -33,9 +33,10 @@ pub fn generate_key_and_address(seed:&str, index:usize) -> (Vec<i8>, String) {
 }
 
 
-pub fn timewarp_hash(address: &str, trunk_or_branch:&str, tag:&str) -> String {
+pub fn timewarp_hash(address: &str, trunk:&str, branch:&str, tag:&str) -> String {
     let mut a = address.trits();
-    a.append(&mut trunk_or_branch.trits());
+    a.append(&mut trunk.trits());
+    a.append(&mut branch.trits());
     let padded_tag = format!("{}{}",tag, "999999999999999999999999999999999999999999999999999999");
     a.append(&mut padded_tag.trits());
     let mut curl = Kerl::default();
@@ -46,18 +47,21 @@ pub fn timewarp_hash(address: &str, trunk_or_branch:&str, tag:&str) -> String {
     hash_trytes
 }
 
-pub fn calculate_normalized_timewarp_hash(address: &str, trunk_or_branch:&str) -> (String, String) {    
+pub fn calculate_normalized_timewarp_hash(address: &str, trunk:&str, branch:&str) -> (String, String) {    
     let mut valid_to_sign = false;
     let mut to_return = String::from("");
-    let mut tag = "999999999999999999999999999999999999999999999999999999999999999999999999999999999".trits();
+    //We include TW on the end of the tag because some libraries (including the rust one)
+    //will copy the obsolute tag as the tag field if it is empty. Meaning the tag that actually
+    //gets stored in the tangle might be a different one then used for normalizing alternate signing.
+    let mut tag = "9999999999999999999999999TW999999999999999999999999999999999999999999999999999999".trits();
     while !valid_to_sign {        
-       let hash_trytes = timewarp_hash(address, trunk_or_branch, &tag.trytes().unwrap()[0..27]);
+       let hash_trytes = timewarp_hash(address, trunk, branch, &tag.trytes().unwrap()[0..27]);
        let normalized = Bundle::normalized_bundle(&hash_trytes);
         if !normalized.contains(&13) {
             to_return = hash_trytes.to_string();
             valid_to_sign = true;
         }else{
-            tag =  iota_utils::trit_adder::add(&tag, &[1]);           
+            tag = iota_utils::trit_adder::add(&tag, &[1]);           
         }       
     }
     (to_return.clone(), tag.trytes().unwrap()[0..27].to_string())
@@ -76,6 +80,26 @@ const TEST_SEED: &str =
 const TEST_TRUNK: &str =
         "BBBEENZYITYVYSPKAURUZAQKGVJEREFDJMYTANAAAGPZ9GJWTEOJJ9IPMXOGZNQLSNMFDSQOTZAEETUEA";
 
+
+
+     #[test]
+    fn manual() {
+        let sig = "NOOGMSXTUCWYSXQESWTHPGRNVRIZEJLECVMYEZ9LHVPNADFVUJRTHFXXUHWZHQULKLWUTZQCGYWKCYACDSPTXGWRNWFYRAUKIFIIMNZNJ9GATAANKBUHCOXVOLFF9VQVYDBDFGFFAJDFEEBKSWLKISAUJWQFJWQVUXRETGVLDRCJJNISAHTJZKTWSF9MCTNNJGBLPYGSMQRLME9OAJVLNN9MINEZFYEMHGXQLXEFRZGTVCGJGFCOFAGOVGWVACRJWKWPZRITIMUXX9KTZTUXIXYTSPGPSWPXQPOHDPPEJDHSJEUDN9WYNUHQKMLGJ9OLFLXCVLCJV9ZDFUEXINBMIIPGXNIBJHSUVKBQJRBQSH9V9FTWEBNKVJIZVKKYISUCQKAL9EAEC9AORSBCLMMTWYNJYEYUQHJARJDOIRNKQQYPTYZRQEFDAZHAGLDB99NHHRRJ9WFBOMFLVYW9NHGESXRMBNWFK9AU9GG9VCLOR9HUZOHTGBLJYSGHQOIHMXHELLUEBFGNSXTKAPPPELROVSYECXOMKFRVNNMNDXHREOECIGCIGXUOUNX9VJRGBJNPKPHQESDTUJCGQQEVUTPIXFRMOLMAOBTAFSWIIPUKUUDSTGI99XHBNSVXWNDDBIDVQTAUEBTBNSASCTIHRSHEVMYXQPSEWTRZILEEPO9MRTJBYQOWIKDNKIDHMCKYDFFODQTJVICYO9DRAISYBPLI9OMSDIZOTAVMMNDSQVE9HEQJFVXVQBWIXOXGHUSQMTLZQGZZVYNSPSXPOWJRSXOPJHQQVFA9MESZEZAQFKNLJWECKYHBACSYF9KOIKYPV9XTF9YOGGUECRPLSMTVMR9HPHJZPCURDGLPJFGWIYSTOXSTNQDHPIEZYEEHGBBT9AUAFIDJGIFHGGS9NIBIMVRTURBAAYGILVMCNISQKSLAUFAPPXNBNPHZPWWMPKULXBVQAZZPDQVDGBBYYWZFMGINDVFHKPJU9IPBJMYVWIJUEUITWJJMLIXVZKPWUUBAUFNGNLJUFMPCUPTPETDJTYIGHWHFFEXIDXUSWSIQKZJKTFOGQWUDVYYVOYJRDBSHRLWTFORWRQAMIYFHOJEXEUUMBNWIOCPXXLWPXUUWAQZKMGROMDFXMZTUATKHGB9ZZ9GXJSRZBBFVSKTUKHVZAPYOKWHKJTKRAKDORQQKZYZOGJJXXFSTQDPUQXUTKCMOROWEFTJYNBNKOBQCATC9F9GQUIAJHGFUJWXDVKXZILRSNMRYYXVXNUUATLYZYMTITKXKRIARNCUENZC9QJMZGKNLUDUYFPMLSNTBLG9PRQRETYVBHSGTSSVKGTRCTGM9BXIXDBXWJDMHCVGXVSIAOJRJ9FPUJCDOKFWMW9UOOYKNGMGFMCBHIQSHQJQLLVGTAAM9SUSQVKUEKHXOQVFQKTWASQLIFOGWHWL9XDOPPIMGDLXMXLIQNDBCRIAQT9SSXAGVCJUBQFNEEARBNOVQJJZCNDZKSUBCTHMPPYGUVXROFOPJBWEQTSHAPQIPGVFFZNSHMPAIOQAGVOWVCSYPFQ9PBDWNIMSLZMWUHZTHSFUPQYCNGEDXVGKQIIBPPSTJ9SXEHURSCSTEAVKCAJSHVXMCGTNJBZP9ABWWQPHCAJYDNKWSVGNVOHWCRC9CTAFRULZHWTWCPIOXFXNTUICISDDETCQJSKEUKJGYVZYBXOJDHDDJANVHFPMOUVWWZPMYODDPXGPGTNKRQWZTVDDGFLGQOXBH9NHQIBUNPCGH9LEGPRRERGXQNSWTLYRYYDLNDRGSKSRVSGZBOPGVHEYZSJZPKXDDOPKTGFLVT9T9HUNVQQITKMJNGW9CZJDOEWZOCLRBVFDOYF9EFAFSSHCVZIWZFRR9ZDIMCCNP9MO9ALATRBUDKCLACIWCQZQBBWMBBPROBFFNZNHMZHNAOJDHAPOWPKTXBVNRKKDKRA99YDHYACSRT9TJZQXUTKW9NJSFWQRVKIMTSQJIPMDXIFAHCBTQLYHBPVULQQAMIWVVXAZVW9JFXNZDFOX9OVWBMIUKKJ9Y9JPAZDFWBYGQTRGOAWMBQIQN9DSQFAUILIWVMOVFPDJPYHSKSYVCGA9OJWHNOKSKNORNN9BZWLAFFOXZADSDE9JRHEMRMSGWPSFUOQIIBAVYVIVIFYTCYLVNXIREUCNIXSWMUPVHTLB";
+        let mut address_validate = "BFERHMFIOKUWX9JWQNBDCDEYRXCLWVMVPGSTKWYSOKBHZYMOABXOKCVFUFGGUFKZDGKX9PZQFKHXMWNID";
+        let mut address_me = "DIZNZKDGJKPYHHHAM9UKPJNATZNAXTSEVOHFNTCPSBKOCMVOGCJAOPPHHURLRPMIIOGJYEMWMLTRRSQD9";
+        let trunk = "AUYZYT99HDRMBTSBPNTZUILBSSIUHIWHUZRORESCP9YUTT9LYZOYKRNQZUVZCN9JQTKLUNVAOYYQACQO9";
+        let branch = "OMQLXTQVX9FPCNVBOEMKTQCXKTDYLVXO9LG9EMSKHOTZLJYXBOZIHJSDWPMTTGJSJJPVIZEOVGJWLNJU9";
+        let tag = "GH9999999999999999999999999";
+
+
+        let tw_hash = "PYXRFZZVRRLIBFYUPYLCUCBTFJSRIBLJ9CTPCPHCQRWWSYYVBBAZDCHXQNDFEJ9GJSQFIAUCLGPGVPVRX";
+        let tw_hash1 = calculate_normalized_timewarp_hash(&address_me, &trunk, &branch);
+        let tw_hash = timewarp_hash(address_me, trunk, branch, tag);
+        println!("{} - {} - {}", tw_hash, tw_hash1.0, tw_hash1.1);
+        let validated = validate_tw_signature(address_validate, &tw_hash, sig);
+        println!("Success!! {}", validated);
+    }
+
     #[test]
     fn print_ln_test() {
         println!("Step 1");
@@ -92,7 +116,7 @@ const TEST_TRUNK: &str =
         
         let mut address_b = address_b_trits.trytes().unwrap();
         println!("Step 2");
-        let tw_bundle = calculate_normalized_timewarp_hash(&*address_b, TEST_TRUNK);
+        let tw_bundle = calculate_normalized_timewarp_hash(&*address_b, TEST_TRUNK, TEST_TRUNK);
         println!("Step 3");
         let signed = sign_tw_hash(&key_a, &tw_bundle.0);
         println!("Step 4");

@@ -31,7 +31,7 @@ use std::*;
 use std::sync::Arc;
 use json::JsonValue;
 use indexstorage::rocksdb::RocksDBProvider;
-use indexstorage::{RangeTxIDLookup, Persistence};
+use indexstorage::{Persistence};
 use timewarping::zmqlistener::*;
 use timewarping::timewarpindexing::*;
 use timewarping::timewarpwalker::*;
@@ -61,9 +61,19 @@ pub struct NodeSettings {
     iri_host: String,
     zmq_host: String,
     iri_port: usize,
-    zmq_port: usize
+    zmq_port: usize,
+    zmq_protocol: String,
+    iri_protocol: String
 }
 
+impl NodeSettings {
+    pub fn zmq_connection(&self) -> String {
+        format!("{}://{}:{}", self.zmq_protocol,self.zmq_host, self.zmq_port)
+    }
+    pub fn iri_connection(&self) -> String {
+        format!("{}://{}:{}", self.iri_protocol, self.iri_host, self.iri_port)
+    }
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CacheSettings {
@@ -114,7 +124,9 @@ lazy_static! {
                     iri_host: lconfig["nodes"]["iri_api_host"].as_string().unwrap(),
                     iri_port: lconfig["nodes"]["iri_api_port"].as_i64().unwrap() as usize,
                     zmq_host: lconfig["nodes"]["zmq_host"].as_string().unwrap(),
-                    zmq_port: lconfig["nodes"]["zmq_port"].as_i64().unwrap() as usize
+                    zmq_port: lconfig["nodes"]["zmq_port"].as_i64().unwrap() as usize,
+                    iri_protocol: lconfig["nodes"]["iri_api_protocol"].as_string().unwrap(),
+                    zmq_protocol: lconfig["nodes"]["zmq_protocol"].as_string().unwrap(),
                 },
                 cache_settings: CacheSettings{
                     local_tangle_max_transactions: lconfig["caching"]["local_tangle_max_transactions"].as_i64().unwrap() ,
@@ -150,7 +162,9 @@ fn main() {
     if args.len() >= 2 {
         config_file = &args[1];
     }
+    
     let do_timewarp = &args.contains(&String::from("--timewarp"));
+    let only_timewarp = &args.contains(&String::from("--only-timewarp"));
     if *do_timewarp {info!("Timewarping");}
 
     let ldr = HoconLoader::new();
@@ -181,11 +195,12 @@ fn main() {
   
    //  let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
+    if !only_timewarp {
 
-    let indexing_actor = sys.actor_of(TimewarpIndexing::props(storage.clone()), TIMEWARP_INDEXING_ACTOR).unwrap();
-   
-    let temp_actor = sys.actor_of(TimewarpWalker::props(storage.clone()), "timewarp-walking").unwrap();
-
+        let indexing_actor = sys.actor_of(TimewarpIndexing::props(storage.clone()), TIMEWARP_INDEXING_ACTOR).unwrap();
+        indexing_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
+        let temp_actor = sys.actor_of(TimewarpWalker::props(storage.clone()), "timewarp-walking").unwrap();
+    }
     //storage_actor.tell(Protocol::AddToIndexPersistence(TimewarpIndexEntry{key: 10, values: vec!["Hallo".to_string(), "world".to_string()]}), None);
    // storage_actor.tell(Protocol::GetFromIndexPersistence(10), None);
     
@@ -196,8 +211,9 @@ fn main() {
     //     , None);
     //{ zmq_listener: BasicActorRef::from(my_actor1.clone())}
     
-    indexing_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
-    if *do_timewarp {
+   
+    if *do_timewarp || *only_timewarp {
+        info!("Start timewarping");
         let timewarp_actor = &sys.actor_of(TimewarpIssuer::props(storage.clone()), TIMEWARP_ISSUER_ACTOR).unwrap();
         &timewarp_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
         &timewarp_actor.tell(Protocol::Start, None);

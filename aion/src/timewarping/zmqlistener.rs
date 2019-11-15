@@ -8,7 +8,7 @@ use riker::actors::Context;
 use std::time::Duration;
 use aionmodel::transaction::*;
 use timewarping::Protocol;
-
+use crate::SETTINGS;
 
 #[derive(Clone, Debug)]
 pub struct StartListening {
@@ -75,8 +75,8 @@ impl ZMQListener {
                 _msg: StartListening,
                 _sender: Sender) {
         println!("Got start listening {}", _msg.host);
-
-        self.socket.connect("tcp://127.0.0.1:5556").unwrap();
+        let node = &SETTINGS.node_settings.zmq_connection(); 
+        self.socket.connect(&node).unwrap();
         self.socket.set_subscribe("tx_trytes ".as_bytes()).unwrap();
         self.socket.set_subscribe("sn ".as_bytes()).unwrap();
 
@@ -102,6 +102,7 @@ impl ZMQListener {
         if msg.is_ok() {
             let msg = msg.unwrap();
             let msg_string = msg.as_str().unwrap();
+            
             if msg_string.starts_with("tx_trytes "){
                 // let split: Vec<&str> = msg_string.split(" ").collect();
                 // let mut tx: iota_lib_rs::iota_model::Transaction = split[1].parse().unwrap();

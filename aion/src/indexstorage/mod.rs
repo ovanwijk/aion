@@ -2,7 +2,6 @@
 use crate::SETTINGS;
 use serde::{Serialize, Deserialize};
 pub mod rocksdb;
-
 use std::marker::{Send, Sync};
 use std::{
     collections::{HashMap, HashSet}};
@@ -28,6 +27,9 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     fn tw_detection_remove_from_index(&self, key:i64, values:HashMap<String, String>);
     fn tw_detection_get(&self, key:&i64) -> HashMap<String, String>;
     fn tw_detection_get_all(&self, keys:Vec<&i64>) -> HashMap<String, String>;
+    fn tw_detection_add_decision_data(&self, tw:  crate::timewarping::Timewarp) -> TimewarpData;
+    fn tw_detection_get_decision_data(&self, key: String) -> Option<TimewarpData>;
+
     fn get_picked_tw_index(&self, key:i64) -> HashMap<String, String>;
     fn get_last_picked_tw(&self) -> Option<TimewarpData>;
     fn add_last_picked_tw(&self, timewarps:Vec<TimewarpData>) -> Result<(), String>;
@@ -54,8 +56,9 @@ pub struct TimewarpIssuingState {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TimewarpData {
     pub timewarpid: String,
-    pub source: String,
-    pub target: String,
+    pub hash: String,
+    pub trunk: String,
+    pub branch: String,
     pub distance: i64,
     pub trunk_or_branch: bool,
     pub timestamp: i64,
@@ -64,47 +67,57 @@ pub struct TimewarpData {
     pub index_since_id: i64,
 }
 
-#[derive(Clone, Debug)]
-pub struct WarpWalk {
-    pub from: String,
-    pub timestamp: i64,
-    pub distance: i64,
-    pub trunk_or_branch:bool,
-    pub target: String
-}
+// #[derive(Clone, Debug)]
+// pub struct WarpWalk {
+//     pub from: String,
+//     pub timestamp: i64,
+//     pub distance: i64,
+//     pub trunk_or_branch:bool,
+//     pub target: String
+// }
 
 
 impl TimewarpData {
-    pub fn advance(&self, new_data:WarpWalk) -> TimewarpData {
+    pub fn advance(&self, new_data: &crate::timewarping::Timewarp) -> TimewarpData {
         TimewarpData {
             timewarpid: self.timewarpid.clone(),
-            source: new_data.from,
-            target: new_data.target,
-            timestamp: new_data.timestamp,
+            hash: new_data.source_hash.clone(),
+            branch: new_data.source_branch.clone(),
+            trunk: new_data.source_trunk.clone(),
+            timestamp: new_data.source_timestamp,
             timestamp_deviation_factor: -1.0,
             distance: new_data.distance,
             index_since_id: self.index_since_id + 1,
-            avg_distance: 0,
+            avg_distance: ((self.distance * 9) + new_data.distance) / 10,
             trunk_or_branch: self.trunk_or_branch
-
+        }
+     }
+     pub fn target_hash(&self) -> String {
+        if self.trunk_or_branch {
+            self.trunk.clone()
+        }else{
+            self.branch.clone()
         }
     }
-}
+ }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct RangeTxIDLookup {
-    pub key: i64,
-    pub values: HashMap<String, String>
-}
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TwIndexEntry { 
-    pub timestamp: Vec<String>
-}
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct TwIndex {
-    //Always store the key as Big Endian to preserve default byte ordering
-    pub key: i64,
-    pub values: HashMap<String, TwIndexEntry>
-}
+
+// #[derive(Serialize, Deserialize, Clone, Debug)]
+// pub struct RangeTxIDLookup {
+//     pub key: i64,
+//     pub values: HashMap<String, String>
+// }
+
+// #[derive(Serialize, Deserialize, Clone, Debug)]
+// pub struct TwIndexEntry { 
+//     pub timestamp: Vec<String>
+// }
+
+// #[derive(Serialize, Deserialize, Clone, Debug)]
+// pub struct TwIndex {
+//     //Always store the key as Big Endian to preserve default byte ordering
+//     pub key: i64,
+//     pub values: HashMap<String, TwIndexEntry>
+// }

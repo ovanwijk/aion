@@ -32,6 +32,7 @@ pub struct TimewarpIssuer {
     timeout_in_seconds: i64,
     promote_timeout_in_seconds: i64,
     storage:Arc<dyn Persistence>,
+    node: String
 }
 
 impl Actor for TimewarpIssuer {
@@ -60,6 +61,7 @@ impl Actor for TimewarpIssuer {
 impl TimewarpIssuer {
     fn actor(storage:Arc<dyn Persistence>) -> Self {
         let last_state = storage.get_timewarp_state();       
+        let node = &SETTINGS.node_settings.iri_connection(); 
         TimewarpIssuer {
             state:  if last_state.is_some() {
                 last_state.unwrap()
@@ -74,6 +76,7 @@ impl TimewarpIssuer {
                     latest_timestamp: 0
                 }
             },
+            node: node.to_string(),
             timeout_in_seconds: 90,
             promote_timeout_in_seconds: 15,
             storage: storage,
@@ -161,15 +164,17 @@ impl TimewarpIssuer {
     }
 
     fn issue_next_transaction(&mut self)  {
-        let mut iota = iota_client::Client::new("http://localhost:14265"); //TODO get from settings
+        let mut iota = iota_client::Client::new(&self.node); //TODO get from settings
         let tips_result = iota.get_transactions_to_approve(GetTransactionsToApproveOptions {
             depth: SETTINGS.timewarp_issuing_settings.tip_selection_depth as usize,
             reference: None
-        }).unwrap();
+        }).expect("Tips to work");
        
        
         let key_addres = generate_key_and_address(&self.state.seed, self.state.latest_index as usize);
-        let tw_hash = calculate_normalized_timewarp_hash(&key_addres.1, &self.state.latest_tx);
+        let tw_hash = calculate_normalized_timewarp_hash(&key_addres.1,
+              if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&self.state.latest_tx} else {&tips_result.trunk_transaction().as_ref().unwrap()} ,
+              if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&tips_result.branch_transaction().as_ref().unwrap()} else {&self.state.latest_tx});
         let signed_message_fragment = sign_tw_hash(&self.state.latest_private_key, &tw_hash.0);
 
         let transfer = Transfer {
@@ -223,11 +228,11 @@ impl TimewarpIssuer {
                     is_confirmed: false
                 };
 
-        let mut iota = iota_client::Client::new("http://localhost:14265"); //TODO get from settings
+        let mut iota = iota_client::Client::new(&self.node); //TODO get from settings
         let tips_result = iota.get_transactions_to_approve(GetTransactionsToApproveOptions {
             depth: SETTINGS.timewarp_issuing_settings.tip_selection_depth as usize,
             reference: None
-        }).unwrap();
+        }).expect("Tips to work");
        
         
         let key_addres = generate_key_and_address(&self.state.seed, 0);

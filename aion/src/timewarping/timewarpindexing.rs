@@ -16,6 +16,7 @@ use indexstorage::Persistence;
 use timewarping::zmqlistener::*;
 use timewarping::Protocol;
 use timewarping::Timewarp;
+use timewarping::signing;
 use timewarping::timewarpwalker::*;
 //use std::collections::HashMap;
 use indexstorage::*;
@@ -85,35 +86,74 @@ impl TimewarpIndexing {
     }
 
     fn detect_timewarp(&mut self, tx:&Transaction) -> Option<Timewarp>{
-        let branch_step = self.tangle.get(&tx.branch_transaction);
         
+        if !tx.tag.ends_with("TW"){
+           return None;
+        }
+        let now = crate::now();
+        if tx.timestamp < now - 120 || tx.timestamp > now + 120 {
+            // warn!("Transaction timestamp out of bounds");
+            return None;
+        }
+        let branch_step = self.tangle.get(&tx.branch_transaction);
+        //let mut branch_mismatch = false;
         if branch_step.is_some() {
-            let diff = tx.timestamp - branch_step.unwrap().timestamp;
+            let branch = branch_step.unwrap();
+            let diff = tx.timestamp - branch.timestamp;
             if diff > 0 &&  //Filterout direct references through bundles
                 diff > SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds &&
                 diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
-                //Found branch timewarp
-                 return Some(Timewarp{
-                    from: tx.hash.clone(),
-                    to: branch_step.unwrap().hash.clone(),
-                    distance: diff,
-                    trunk_or_branch: false
-                })    
+                //Validate signature
+                let tw_hash = signing::timewarp_hash(&tx.address, &tx.trunk_transaction, &tx.branch_transaction, &tx.tag);
+                let valid_signature = signing::validate_tw_signature(&branch.address, &tw_hash, &tx.signature_fragments);
+                if valid_signature {
+                    //Found branch timewarp
+                    return Some(Timewarp{
+                        source_hash: tx.hash.clone(),
+                        source_branch: tx.branch_transaction.clone(),
+                        source_trunk: tx.trunk_transaction.clone(),
+                        source_timestamp: tx.timestamp,
+                        distance: diff,
+                        trunk_or_branch: false
+                    })
+                }else{
+                   info!("Invalid timewarp signature, ID: {}, ADDRESS: {}, TW: {}",tx.hash.clone(), &branch.address, tw_hash);
+                   //branch_mismatch = true;
+                }
+                    
             }
         }
         let trunk_step = self.tangle.get(&tx.trunk_transaction);
         if trunk_step.is_some() {
-            let diff = tx.timestamp - trunk_step.unwrap().timestamp;
+            let trunk = trunk_step.unwrap();
+            let diff = tx.timestamp - trunk.timestamp;
             if diff > 0 && 
                 diff > SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds &&
                 diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
                 //Found trunk timewarp
-                return Some(Timewarp{
-                    from: tx.hash.clone(),
-                    to: trunk_step.unwrap().hash.clone(),
-                    distance: diff,
-                    trunk_or_branch: true
-                })     
+                let tw_hash = signing::timewarp_hash(&tx.address, &tx.trunk_transaction, &tx.branch_transaction, &tx.tag);
+                let valid_signature = signing::validate_tw_signature(&trunk.address, &tw_hash, &tx.signature_fragments);
+                if valid_signature {
+                    //Found branch timewarp
+                    return Some(Timewarp{
+                        source_hash: tx.hash.clone(),
+                        source_branch: tx.branch_transaction.clone(),
+                        source_trunk: tx.trunk_transaction.clone(),
+                        source_timestamp: tx.timestamp,
+                        distance: diff,
+                        trunk_or_branch: true
+                    })
+                }else{
+                      info!("Invalid timewarp signature, ID: {}, ADDRESS: {}, TW: {}",tx.hash.clone(), &trunk.address, tw_hash);
+                    
+                }
+
+                // return Some(Timewarp{
+                //     source_tx: tx.hash.clone(),
+                //     target_tx: trunk.hash.clone(),
+                //     distance: diff,
+                //     trunk_or_branch: true
+                // })     
             }
         }
         None
@@ -165,30 +205,32 @@ impl TimewarpIndexing {
                 let tw = timewarp.unwrap();
                 if self.last_picked_tw.is_some() {
                     let unwrapped = self.last_picked_tw.as_ref().unwrap();
-                    if unwrapped.source == tw.to {
+                    if &unwrapped.hash == tw.target_hash() {
                         info!("Found connecting timewarp");
-
                     }
                 }
-                if self.known_timewarp_tips.get(&tw.to).is_some() {
-                    info!("Found a known timewarp Old: {} and new {}", tw.to.to_string(), tw.from.to_string());
-                    self.known_timewarp_tips.remove(&tw.to);
-                    self.known_timewarp_tips.insert(tw.from.to_string(), tw.to.to_string());
+                if self.known_timewarp_tips.get(tw.target_hash()).is_some() {
+                    info!("Found a known timewarp Old: {} and new {}", tw.target_hash().to_string(), tw.source_hash.to_string());
+                    self.known_timewarp_tips.remove(tw.target_hash());
+                    self.known_timewarp_tips.insert(tw.source_hash.to_string(), tw.target_hash().to_string());
+                    self.storage.tw_detection_add_decision_data(tw.clone());
                     self.storage.tw_detection_add_to_index(get_time_key(&cpy.timestamp),
-                        vec![(tw.from, tw.to)]);
+                        vec![(tw.source_hash.to_string(), tw.target_hash().to_string())]);
                    
                 }else{
-                    self.known_timewarp_tips.insert(tw.from.to_string(), tw.to.to_string());
-                    info!("Found a new timewarp!!!!!, start following{}-{}", tw.from.to_string(), tw.to.to_string());
-                    let my_actor3 = _ctx.actor_of(TimewarpWalker::props(self.storage.clone()), &format!("timewarp-walking-{}", tw.from.to_string())).unwrap();
+                    self.known_timewarp_tips.insert(tw.source_hash.to_string(), tw.target_hash().to_string());
+                    info!("Found a new timewarp!!!!!, start following ToB {} - {} - {}", tw.trunk_or_branch , tw.source_hash.to_string(), tw.target_hash().to_string());
+                    let my_actor3 = _ctx.actor_of(TimewarpWalker::props(self.storage.clone()), &format!("timewarp-walking-{}", tw.source_hash.to_string())).unwrap();
                     
                     my_actor3.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
-                        target_hash: tw.to, 
+                        source_hash: cpy.hash, 
+                        source_branch: cpy.branch_transaction,
+                        source_trunk: cpy.trunk_transaction,
                         source_timestamp: cpy.timestamp, 
                         trunk_or_branch: tw.trunk_or_branch,
                         last_picked_tw_tx: {
                            if self.last_picked_tw.is_some() {
-                                let r = &self.last_picked_tw.as_ref().unwrap().source;
+                                let r = &self.last_picked_tw.as_ref().unwrap().hash;
                                 r.to_owned()
                            }else{
                                 String::from("")

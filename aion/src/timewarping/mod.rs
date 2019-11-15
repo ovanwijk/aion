@@ -4,8 +4,8 @@ pub mod timewarpwalker;
 pub mod signing;
 pub mod timewarpissuing;
 use serde::{Serialize, Deserialize};
-use indexstorage;
-use std::collections::HashMap;
+
+
 
 #[derive(Clone, Debug)]
 pub enum Protocol {
@@ -13,7 +13,7 @@ pub enum Protocol {
     Start,
     Timer,
     StartTimewarpWalking(timewarpwalker::StartTimewarpWalking),
-    TimewarpWalkingResult(Vec<indexstorage::WarpWalk>),
+    TimewarpWalkingResult(Vec<Timewarp>),
     PullTxData(zmqlistener::PullTxData),
     StartListening(zmqlistener::StartListening),
     NewTransaction(zmqlistener::NewTransaction),
@@ -21,10 +21,25 @@ pub enum Protocol {
     RegisterZMQListener(zmqlistener::RegisterZMQListener)
 }
 
+#[derive(Clone, Debug)]
 pub struct Timewarp {
-    from:String,
-    to:String,
-    distance:i64, //timestamp difference
-    trunk_or_branch:bool
+    pub source_hash: String,
+    pub source_branch: String,
+    pub source_trunk: String,
+    pub source_timestamp:i64,
+
+    pub distance:i64, //timestamp difference
+    pub trunk_or_branch:bool
+}
+
+
+impl Timewarp {
+    pub fn target_hash(&self) -> &String {
+        if self.trunk_or_branch {
+            &self.source_trunk
+        }else{
+            &self.source_branch
+        }
+    }
 }
 

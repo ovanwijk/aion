@@ -6,14 +6,16 @@ use std::sync::Arc;
 use riker::actors::*;
 use riker::actors::Context;
 use std::convert::TryInto;
-use timewarping::Protocol;
-use indexstorage::WarpWalk;
+use timewarping::{Protocol, Timewarp};
+//use indexstorage::WarpWalk;
+
 use crate::SETTINGS;
 use indexstorage::{get_time_key, Persistence};
 //use iota_client::options::;
 use iota_lib_rs::prelude::*;
 use iota_lib_rs::iota_client::*;
 use iota_model::Transaction;
+use timewarping::signing;
 use iota_conversion::trytes_converter;
 use std::collections::HashMap;
 
@@ -22,16 +24,34 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub struct StartTimewarpWalking {
-    pub target_hash: String,
+    pub source_hash: String,
     pub source_timestamp: i64,
+    //pub source_tag: String,
+    pub source_branch: String,
+    pub source_trunk: String,
+    //pub source_signature: String,
     pub trunk_or_branch: bool,
     pub last_picked_tw_tx: String
+}
+
+impl StartTimewarpWalking {
+    pub fn target_hash(&self) -> &String {
+        if self.trunk_or_branch {
+            &self.source_trunk
+        }else{
+            &self.source_branch
+        }
+    }
 }
 
 impl Default for StartTimewarpWalking {
     fn default() -> StartTimewarpWalking{
         StartTimewarpWalking{
-            target_hash:String::from(""),
+            source_hash:String::from(""),
+            source_branch:String::from(""),
+            source_trunk:String::from(""),
+           // source_tag:String::from(""),
+           // source_signature:String::from(""),
             source_timestamp:0,
             trunk_or_branch:false,
             last_picked_tw_tx: String::from("")
@@ -43,9 +63,9 @@ impl Default for StartTimewarpWalking {
 #[derive(Debug)]
 pub struct TimewarpWalker {
     start: String,
-    path: LinkedList<WarpWalk>,
     storage_actor:Arc<dyn Persistence>,
     timewarp_state: StartTimewarpWalking,
+    node: String,
     reply_to: Option<BasicActorRef>
 }
 
@@ -71,13 +91,14 @@ impl Actor for TimewarpWalker {
 
 
 impl TimewarpWalker {
-    fn actor(storage_actor:Arc<dyn Persistence>) -> Self {        
+    fn actor(storage_actor:Arc<dyn Persistence>) -> Self {
+        let node = &SETTINGS.node_settings.iri_connection(); 
         TimewarpWalker {
             start: "".to_string(),
-            path: LinkedList::new(),
             storage_actor: storage_actor,
             timewarp_state: StartTimewarpWalking::default(),
-            reply_to: None
+            reply_to: None,
+            node: node.to_string()
         }
     }
     pub fn props(storage_actor:Arc<dyn Persistence>) -> BoxActorProd<TimewarpWalker> {
@@ -101,59 +122,106 @@ impl TimewarpWalker {
     }
 
 
-    fn walk(&mut self, timewalk:StartTimewarpWalking) -> Vec<WarpWalk>{
-        let mut txid = timewalk.target_hash.clone();
+    fn walk(&mut self, timewalk:StartTimewarpWalking) -> Vec<Timewarp>{
+        let mut txid = timewalk.target_hash().clone();
         let mut timestamp = timewalk.source_timestamp.clone();
-        let mut iota = iota_client::Client::new("http://localhost:14265"); //TODO get from settings
+        let mut iota = iota_client::Client::new(&self.node); //TODO get from settings
         let mut finished = false;   
-        let mut to_return:Vec<WarpWalk> = Vec::new();    
+        let mut to_return:Vec<Timewarp> = Vec::new();
+        let mut api_cache: Option<Transaction> = None;
 
       
         while finished == false {
-            let result = iota.get_trytes(&[txid.to_owned()]);
-            if result.is_ok() {
-               let tx_trytes = &result.unwrap_or_default().take_trytes().unwrap_or_default()[0];
-               let tx:Transaction = tx_trytes.parse().unwrap_or_default();
-               if tx.hash != "999999999999999999999999999999999999999999999999999999999999999999999999999999999" {
-
-                    let diff = timestamp - tx.timestamp;
-                    if diff >= SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds 
-                        && diff <= SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
-                        
-                        to_return.push(WarpWalk{
-                            from: txid.clone(),
-                            timestamp: timestamp,
-                            distance: diff,
-                            target: if timewalk.trunk_or_branch {tx.trunk_transaction.clone() } else {tx.branch_transaction.clone()},
-                            trunk_or_branch: timewalk.trunk_or_branch
-                        });
-
-                        txid = if timewalk.trunk_or_branch {tx.trunk_transaction.clone() } else {tx.branch_transaction.clone()};
-                        timestamp = tx.timestamp.clone().try_into().unwrap();
-                        if txid == timewalk.last_picked_tw_tx {
-                            info!("Found last picked timewarp, stopped searching");
-                            finished = true;
-                        }
-                        let keys = self.storage_actor.tw_detection_get(&get_time_key(&timestamp));
-                        if keys.contains_key(&txid){
-                            finished = true;
-                        }
-                        //found the timewarp!
+            let tx_ = if api_cache.is_some() && api_cache.clone().expect("Value in api_cache").hash == txid.to_owned() {
+               
+                Some(api_cache.clone().expect("Value in api_cache"))
+            }else{
+                let result = iota.get_trytes(&[txid.to_owned()]);
+                if result.is_ok() {
+                    let tx_trytes = &result.unwrap_or_default().take_trytes().unwrap_or_default()[0];
+                    let tx:Transaction = crate::aionmodel::transaction::parse_tx_trytes(&tx_trytes, &txid);
+                    //We only care about signed messages
+                    if tx.signature_fragments == "" ||  tx.signature_fragments.starts_with("999999999999999999999999999999999999999999999999999999999999999999999999999999999") {
+                        None
                     }else{
-                        //nothing to see possibly beginning of timewarp. Set timewarpID
+                        Some(tx)
+                    }
+                }else{
+                    None
+                }
+            };
+            
+            if tx_.is_some() {              
+                let tx:Transaction = tx_.expect("Transaction");
+                let diff = timestamp - tx.timestamp;
+                if diff >= SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds 
+                    && diff <= SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
+                    //TODO Validate signature
+                    let target_tx = if timewalk.trunk_or_branch {tx.trunk_transaction.clone() } else {tx.branch_transaction.clone()};
+                    let result = iota.get_trytes(&[target_tx.to_owned()]);
+                    let walked_tx = if result.is_ok() {
+                        let tx_trytes = &result.unwrap_or_default().take_trytes().unwrap_or_default()[0];
+                        let tx:Transaction = crate::aionmodel::transaction::parse_tx_trytes(&tx_trytes, &target_tx);
+                        //We only care about signed messages
+                        if tx.signature_fragments == "" || tx.signature_fragments.starts_with("999999999999999999999999999999999999999999999999999999999999999999999999999999999") {
+                            None
+                        }else{
+                            Some(tx)
+                        }
+                    }else{
+                        None
+                    };
+                    if walked_tx.is_some() {
+                        
+                        let walked_unwrapped = walked_tx.expect("Walked transacion");
+                        let tw_hash = signing::timewarp_hash(&tx.address, &tx.trunk_transaction, &tx.branch_transaction, &tx.tag);
+                        let valid_signature = signing::validate_tw_signature(&walked_unwrapped.address, &tw_hash, &tx.signature_fragments);
+                        if valid_signature {
+                            to_return.push(Timewarp{
+                                source_hash: txid.clone(),
+                                source_timestamp: timestamp,
+                                distance: diff,
+                                source_branch: tx.branch_transaction.clone(),
+                                source_trunk: tx.trunk_transaction.clone(),                                
+                                trunk_or_branch: timewalk.trunk_or_branch
+                            });
+                            txid = if timewalk.trunk_or_branch {tx.trunk_transaction.clone() } else {tx.branch_transaction.clone()};
+                            timestamp = tx.timestamp.clone().try_into().unwrap();
+                            if txid == timewalk.last_picked_tw_tx {
+                                info!("Found last picked timewarp, stopped searching");
+                                finished = true;
+                            }
+                            let keys = self.storage_actor.tw_detection_get(&get_time_key(&timestamp));
+                            if keys.contains_key(&txid){
+                                info!("Found reference to already detected timewarp transaction.");
+                                finished = true;
+                            }
+                            info!("Found and added, ID:{}, ADDRESS:{}, TW: {}",tx.hash.clone(), &walked_unwrapped.address, tw_hash);
+                        }else{
+                            info!("Invalid timewarp signature, ID: {} ADDRESS:{} TW: {}",tx.hash.clone(), &walked_unwrapped.address, tw_hash);
+                            finished = true;
+                        }
+                        api_cache.replace(walked_unwrapped);
+                        //api_cache = Some(walked_unwrapped);
+                    }else{
+                         info!("Walked transaction not found! {}", target_tx.to_owned());
                         finished = true;
                     }
-                    
-               }else{
-                   //nothing to see possibly beginning of timewarp. Set timewarpID
-                   finished = true;
-               }
+                    //found the timewarp!
+                }else{
+                    //nothing to see possibly beginning of timewarp. Set timewarpID
+                    info!("Transaction not found! {}", txid.to_owned());
+                    finished = true;
+                }
+                   
+             
                println!("Got transaction!");
                
            }
         }
-        for v in &to_return {
-            let _res = self.storage_actor.tw_detection_add_to_index(get_time_key(&v.timestamp), vec![(v.from.to_string(), v.target.to_string())]);
+        for v in to_return.iter().rev() {
+            self.storage_actor.tw_detection_add_decision_data(v.clone());
+            let _res = self.storage_actor.tw_detection_add_to_index(get_time_key(&v.source_timestamp), vec![(v.source_hash.to_string(), v.target_hash().to_string())]);
         }
 
         to_return      
