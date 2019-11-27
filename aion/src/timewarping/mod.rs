@@ -13,7 +13,7 @@ pub enum Protocol {
     Start,
     Timer,
     StartTimewarpWalking(timewarpwalker::StartTimewarpWalking),
-    TimewarpWalkingResult(Vec<Timewarp>),
+    TimewarpWalkingResult(String, Vec<Timewarp>),
     PullTxData(zmqlistener::PullTxData),
     StartListening(zmqlistener::StartListening),
     NewTransaction(zmqlistener::NewTransaction),

@@ -68,7 +68,7 @@ impl TimewarpIssuer {
             } else {
                 TimewarpIssuingState {
                     seed: generate_new_seed(),
-                    latest_index: 0,
+                    latest_index: String::from("99999"),
                     latest_tx: "".to_string(),
                     original_tx: "".to_string(),
                     latest_private_key: Vec::new(),
@@ -89,7 +89,7 @@ impl TimewarpIssuer {
 
     fn should_restart(&mut self) -> bool {
         let diff = crate::now() - (SETTINGS.timewarp_issuing_settings.interval_in_seconds * 2);
-        if self.state.latest_index == 0 || diff > self.state.latest_timestamp  {
+        if self.state.latest_index_num() == 0 || diff > self.state.latest_timestamp  {
             return true;
         };
         false
@@ -170,11 +170,13 @@ impl TimewarpIssuer {
             reference: None
         }).expect("Tips to work");
        
-       
-        let key_addres = generate_key_and_address(&self.state.seed, self.state.latest_index as usize);
+        let increased_index = increase_index(&self.state.latest_index); 
+        let key_addres = generate_key_and_address(&self.state.seed, self.state.latest_index_num() as usize);
         let tw_hash = calculate_normalized_timewarp_hash(&key_addres.1,
               if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&self.state.latest_tx} else {&tips_result.trunk_transaction().as_ref().unwrap()} ,
-              if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&tips_result.branch_transaction().as_ref().unwrap()} else {&self.state.latest_tx});
+              if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&tips_result.branch_transaction().as_ref().unwrap()} else {&self.state.latest_tx},
+              &increased_index,
+             &self.state.random_id());
         let signed_message_fragment = sign_tw_hash(&self.state.latest_private_key, &tw_hash.0);
 
         let transfer = Transfer {
@@ -199,7 +201,7 @@ impl TimewarpIssuer {
         let tx: Transaction = pow_trytes[0].parse().unwrap();
 
         let new_state = TimewarpIssuingState {
-                    latest_index: self.state.latest_index + 1,
+                    latest_index: increased_index,
                     latest_tx: tx.hash.to_string(),
                     original_tx: self.state.original_tx.clone(),
                     latest_private_key: key_addres.0,
@@ -220,7 +222,7 @@ impl TimewarpIssuer {
     fn issue_first_transaction(&mut self)  {
         self.state = TimewarpIssuingState {
                     seed: generate_new_seed(),
-                    latest_index: 0,
+                    latest_index: String::from("99999"),
                     latest_tx: "".to_string(),
                     original_tx: "".to_string(),
                     latest_private_key: Vec::new(),
@@ -256,7 +258,7 @@ impl TimewarpIssuer {
         let tx: Transaction = pow_trytes[0].parse().unwrap();
 
         let new_state = TimewarpIssuingState {
-                    latest_index: 1,
+                    latest_index: self.state.latest_index.to_string(),
                     latest_tx: tx.hash.to_string(),
                     original_tx: tx.hash.to_string(),
                     latest_private_key: key_addres.0,

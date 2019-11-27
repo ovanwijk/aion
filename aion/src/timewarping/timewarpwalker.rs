@@ -21,7 +21,7 @@ use std::collections::HashMap;
 
 
 
-
+//TODO include timewarp in fields, same sinature
 #[derive(Clone, Debug)]
 pub struct StartTimewarpWalking {
     pub source_hash: String,
@@ -30,11 +30,15 @@ pub struct StartTimewarpWalking {
     pub source_branch: String,
     pub source_trunk: String,
     //pub source_signature: String,
+    pub distance: i64,
     pub trunk_or_branch: bool,
     pub last_picked_tw_tx: String
 }
 
 impl StartTimewarpWalking {
+    pub fn id(&self) -> String {
+        format!("{} | {}",&self.source_hash, self.target_hash())
+    }
     pub fn target_hash(&self) -> &String {
         if self.trunk_or_branch {
             &self.source_trunk
@@ -52,6 +56,7 @@ impl Default for StartTimewarpWalking {
             source_trunk:String::from(""),
            // source_tag:String::from(""),
            // source_signature:String::from(""),
+            distance: 0,
             source_timestamp:0,
             trunk_or_branch:false,
             last_picked_tw_tx: String::from("")
@@ -84,8 +89,6 @@ impl Actor for TimewarpWalker {
             _ => ()
         }
     }
-   
-    
 }
 
 
@@ -111,10 +114,11 @@ impl TimewarpWalker {
                 _sender: Sender) {
             
             self.timewarp_state = _msg.clone();
-           // self.reply_to = _sender;
+            // self.reply_to = _sender;
+            let id = _msg.id();
             let result = self.walk(_msg);
             if _sender.is_some() {
-                let _l = _sender.unwrap().try_tell(Protocol::TimewarpWalkingResult(result), None);
+                let _l = _sender.unwrap().try_tell(Protocol::TimewarpWalkingResult(id, result), _ctx.myself());
             }
             _ctx.stop(_ctx.myself());
             //let result = self.walk(_msg);
@@ -130,6 +134,14 @@ impl TimewarpWalker {
         let mut to_return:Vec<Timewarp> = Vec::new();
         let mut api_cache: Option<Transaction> = None;
 
+        to_return.push(Timewarp{
+            source_hash: timewalk.source_hash.clone(),
+            source_timestamp: timewalk.source_timestamp,
+            distance: timewalk.distance,
+            source_branch: timewalk.source_branch.clone(),
+            source_trunk: timewalk.source_trunk.clone(),                                
+            trunk_or_branch: timewalk.trunk_or_branch
+        });
       
         while finished == false {
             let tx_ = if api_cache.is_some() && api_cache.clone().expect("Value in api_cache").hash == txid.to_owned() {
@@ -171,8 +183,7 @@ impl TimewarpWalker {
                     }else{
                         None
                     };
-                    if walked_tx.is_some() {
-                        
+                    if walked_tx.is_some() {                        
                         let walked_unwrapped = walked_tx.expect("Walked transacion");
                         let tw_hash = signing::timewarp_hash(&tx.address, &tx.trunk_transaction, &tx.branch_transaction, &tx.tag);
                         let valid_signature = signing::validate_tw_signature(&walked_unwrapped.address, &tw_hash, &tx.signature_fragments);
@@ -219,10 +230,7 @@ impl TimewarpWalker {
                
            }
         }
-        for v in to_return.iter().rev() {
-            self.storage_actor.tw_detection_add_decision_data(v.clone());
-            let _res = self.storage_actor.tw_detection_add_to_index(get_time_key(&v.source_timestamp), vec![(v.source_hash.to_string(), v.target_hash().to_string())]);
-        }
+       
 
         to_return      
   

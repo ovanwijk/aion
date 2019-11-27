@@ -53,7 +53,7 @@ impl Actor for ZMQListener {
             Protocol::StartListening(__msg) => self.receive_startlistening(ctx, __msg, sender),
             Protocol::PullTxData(__msg) => self.receive_pulltxdata(ctx, __msg, sender),
             Protocol::RegisterRoutee => self.receive_registerroutee(ctx, msg, sender),
-            _ => ()
+            _ => warn!("Unsupported message")
         }
     }
     

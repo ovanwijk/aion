@@ -49,6 +49,7 @@ impl Persistence for RocksDBProvider {
             info!("Advancing {}: Index: {} Avg distance {}", &advanced.timewarpid, &advanced.index_since_id, &advanced.avg_distance );
             advanced
         }else{
+            info!("New timewarp: {}", tw.source_hash.clone());
             TimewarpData {
                 timewarpid: tw.source_hash.clone(),
                 hash: tw.source_hash.clone(),
@@ -78,7 +79,7 @@ impl Persistence for RocksDBProvider {
         }else {
             let handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_COLUMN).unwrap();
             let result: Option<TimewarpData> = match self.provider.get_cf(handle,  key.as_bytes()) {                
-                Ok(Some(value)) => Some(bincode::deserialize(&*value).unwrap()),
+                Ok(Some(value)) => Some(bincode::deserialize(&*value).expect("Deserialisation to work")),
                 Ok(None) => None,
                 Err(e) => {println!("operational problem encountered: {}", e);
                 None},
@@ -86,7 +87,7 @@ impl Persistence for RocksDBProvider {
             };
 
             if result.is_some() {
-                info!("Obtained from cache");
+                info!("Obtained from storage");
                 borrowed_cached.insert(key.clone(), result.clone().unwrap().clone());
             }
             result

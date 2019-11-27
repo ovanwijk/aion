@@ -34,7 +34,10 @@ pub struct TimewarpIndexing {
     avg_distance: f64,
     storage: Arc<dyn Persistence>,
     //Map containing TXID as key and TimewarpID as Value
+    //Timewarp ID is used when using the timewarp walker and cache intermediate progress on the timewarp.
     known_timewarp_tips: HashMap<String, String>,
+    
+    known_active_walks: HashMap<String, Vec<Timewarp>>,    
     last_picked_tw: Option<TimewarpData>    
 }
 
@@ -52,6 +55,7 @@ impl Actor for TimewarpIndexing {
             Protocol::RegisterZMQListener(__msg) => self.receive_registerzmqlistener(ctx, __msg, sender),
             Protocol::NewTransaction(__msg) => self.receive_newtransaction(ctx, __msg, sender),
             Protocol::TransactionConfirmed(__msg) => self.receive_transactionconfimation(ctx, __msg, sender),
+            Protocol::TimewarpWalkingResult(id, __msg) => self.receive_timewalkresult(ctx, id, __msg, sender), //TODO remove from walking history
             _ => ()
         }
     }
@@ -101,6 +105,7 @@ impl TimewarpIndexing {
             let branch = branch_step.unwrap();
             let diff = tx.timestamp - branch.timestamp;
             if diff > 0 &&  //Filterout direct references through bundles
+                (tx.tag[15..] == branch.tag[15..] || tx.tag[15..] == branch.hash[0..9]) && // Check the if the tag endings are correct
                 diff > SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds &&
                 diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
                 //Validate signature
@@ -174,10 +179,11 @@ impl TimewarpIndexing {
             avg_distance: 1000.0 ,//default 1 second
             storage: storage,
             known_timewarp_tips: HashMap::new(),
+            known_active_walks: HashMap::new(),
             last_picked_tw: last_picked.to_owned()
         }
     }
-     fn receive_newtransaction(&mut self,
+    fn receive_newtransaction(&mut self,
                 _ctx: &Context<Protocol>,
                 _msg: NewTransaction,
                 _sender: Sender) {
@@ -186,6 +192,32 @@ impl TimewarpIndexing {
         self.tangle.insert(_msg.tx);
         self.cal_avarage_timeleap(&cpy);       
         self.tangle.maintain();
+    }
+
+    fn receive_timewalkresult(&mut self,
+        _ctx: &Context<Protocol>,
+        id: String,
+        timewarps: Vec<Timewarp>,
+        _sender: Sender) {
+        
+        //We need to reverse the insertion order for the found timewarp. The walker walks from present to past but we want to insert from
+        //Past to present to keep statistics.
+        for v in timewarps.iter().rev() {
+            self.storage.tw_detection_add_decision_data(v.clone());
+            let _res = self.storage.tw_detection_add_to_index(get_time_key(&v.source_timestamp), vec![(v.source_hash.to_string(), v.target_hash().to_string())]);
+        }
+        //Here we don't need to reverse because they get in the correct order.
+        for v in self.known_active_walks.get(&id).expect("The vec to exists even when empty") {
+            info!("Inserting lagging timewarp.");
+            self.storage.tw_detection_add_decision_data(v.clone());
+            let _res = self.storage.tw_detection_add_to_index(get_time_key(&v.source_timestamp), vec![(v.source_hash.to_string(), v.target_hash().to_string())]);
+        }
+
+        let _a = self.known_active_walks.remove(&id);
+        if _a.is_some() {
+            info!("Removing: {}", &id);
+        }
+       
     }
 
 /**
@@ -209,23 +241,41 @@ impl TimewarpIndexing {
                         info!("Found connecting timewarp");
                     }
                 }
-                if self.known_timewarp_tips.get(tw.target_hash()).is_some() {
-                    info!("Found a known timewarp Old: {} and new {}", tw.target_hash().to_string(), tw.source_hash.to_string());
-                    self.known_timewarp_tips.remove(tw.target_hash());
-                    self.known_timewarp_tips.insert(tw.source_hash.to_string(), tw.target_hash().to_string());
-                    self.storage.tw_detection_add_decision_data(tw.clone());
-                    self.storage.tw_detection_add_to_index(get_time_key(&cpy.timestamp),
-                        vec![(tw.source_hash.to_string(), tw.target_hash().to_string())]);
+                let known_tip = self.known_timewarp_tips.get(tw.target_hash());
+                if known_tip.is_some() {
+                    let unwrapped = known_tip.unwrap();
+                    //check if we have an active walker ID.
+                    //Not having this is default and will result in immediate storage of the ID
+                    if unwrapped == "" || !self.known_active_walks.contains_key(unwrapped) {
+                    
+                        info!("Found a known timewarp Old: {} and new {}", tw.target_hash().to_string(), tw.source_hash.to_string());
+                        self.known_timewarp_tips.remove(tw.target_hash());
+                        self.known_timewarp_tips.insert(tw.source_hash.to_string(), String::new());
+                        self.storage.tw_detection_add_decision_data(tw.clone());
+                        self.storage.tw_detection_add_to_index(get_time_key(&cpy.timestamp),
+                            vec![(tw.source_hash.to_string(), tw.target_hash().to_string())]);
+                    }else{
+                        info!("Caching lagging timewarp. {}", tw.source_hash.to_string());
+
+                        let vec_to_add = self.known_active_walks.get_mut(unwrapped).expect("The key to be there");
+                        //Todo how do I fix borrowing issues here?
+                        self.known_timewarp_tips.insert(tw.source_hash.to_string(), unwrapped.to_string());
+                        self.known_timewarp_tips.remove(tw.target_hash());                                               
+                        
+                        
+                        vec_to_add.push(tw.clone());
+                    }
                    
                 }else{
-                    self.known_timewarp_tips.insert(tw.source_hash.to_string(), tw.target_hash().to_string());
+
                     info!("Found a new timewarp!!!!!, start following ToB {} - {} - {}", tw.trunk_or_branch , tw.source_hash.to_string(), tw.target_hash().to_string());
                     let my_actor3 = _ctx.actor_of(TimewarpWalker::props(self.storage.clone()), &format!("timewarp-walking-{}", tw.source_hash.to_string())).unwrap();
-                    
-                    my_actor3.tell(Protocol::StartTimewarpWalking(StartTimewarpWalking { 
+
+                    let tw_start = StartTimewarpWalking { 
                         source_hash: cpy.hash, 
                         source_branch: cpy.branch_transaction,
                         source_trunk: cpy.trunk_transaction,
+                        distance: tw.distance,
                         source_timestamp: cpy.timestamp, 
                         trunk_or_branch: tw.trunk_or_branch,
                         last_picked_tw_tx: {
@@ -235,8 +285,13 @@ impl TimewarpIndexing {
                            }else{
                                 String::from("")
                            }
-                        }})
-                        , Some(BasicActorRef::from(_ctx.myself())));
+                        }};
+                    //Insert in caching of active timewarps. So they get added 
+                    self.known_timewarp_tips.insert(tw.source_hash.to_string(), tw_start.id());
+                    self.known_active_walks.insert(tw_start.id(), Vec::new());
+
+                    my_actor3.tell(Protocol::StartTimewarpWalking(tw_start)
+                       , Some(BasicActorRef::from(_ctx.myself())));
                 }
             }
         }

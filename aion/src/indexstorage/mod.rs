@@ -1,7 +1,9 @@
 
 use crate::SETTINGS;
 use serde::{Serialize, Deserialize};
+use timewarping::signing::*;
 pub mod rocksdb;
+
 use std::marker::{Send, Sync};
 use std::{
     collections::{HashMap, HashSet}};
@@ -9,6 +11,7 @@ use std::{
 pub fn get_time_key(timestamp:&i64) -> i64 {    
     timestamp - (timestamp % SETTINGS.timewarp_index_settings.time_index_clustering_in_seconds as i64)    
 }
+use iota_lib_rs::iota_conversion;
 
 
 pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
@@ -43,13 +46,27 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TimewarpIssuingState {
-    pub seed:String,
+    pub seed: String,
     pub original_tx: String,
     pub latest_tx: String,
     pub latest_timestamp: i64,
     pub is_confirmed:bool,
-    pub latest_index: i64,
+    pub latest_index: String,
     pub latest_private_key: Vec<i8>
+}
+
+impl TimewarpIssuingState {
+    pub fn random_id(&self) -> &str {
+        if &self.original_tx.len() >= &(9 as usize) {
+            &self.original_tx[0..9]
+        }else{
+            "999999999"
+        }
+        
+    }
+    pub fn latest_index_num(&self) -> i64 {
+        trytes_to_number(&self.latest_index)
+    }
 }
 
 

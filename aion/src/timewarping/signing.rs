@@ -1,6 +1,6 @@
 
 use iota_signing::*;
-use iota_conversion::Trinary;
+use iota_conversion::{Trinary,long_value};
 use iota_constants;
 use iota_utils;
 
@@ -8,6 +8,8 @@ use iota_crypto::{Kerl, Sponge};
 use iota_model::Bundle;
 use iota_constants::HASH_TRINARY_SIZE;
 use std::cmp;
+
+
 
 
 pub fn sign_tw_hash(private_key:&Vec<i8>, tw_hash:&str) -> String {
@@ -21,6 +23,16 @@ pub fn validate_tw_signature(pub_key:&str, tw_hash:&str, signature:&str) -> bool
     validate_signatures(pub_key, &[String::from(signature)], tw_hash).unwrap()
 }
 
+pub fn increase_index(index:&str) -> String {
+    iota_utils::trit_adder::add(&index.trits(), &[1]).trytes().expect("Trytes to work")
+}
+
+pub fn trytes_to_number(trytes:&str) -> i64 {
+    long_value(&trytes.trits())
+}
+/**
+ * Returns Key Trit vector and the corresponding public key trytes (address)
+ */
 pub fn generate_key_and_address(seed:&str, index:usize) -> (Vec<i8>, String) {
     //We only care about security 1 for this.
     let key_a = key(&seed.trits(), index, 1).unwrap();
@@ -37,6 +49,7 @@ pub fn timewarp_hash(address: &str, trunk:&str, branch:&str, tag:&str) -> String
     let mut a = address.trits();
     a.append(&mut trunk.trits());
     a.append(&mut branch.trits());
+  
     let padded_tag = format!("{}{}",tag, "999999999999999999999999999999999999999999999999999999");
     a.append(&mut padded_tag.trits());
     let mut curl = Kerl::default();
@@ -47,24 +60,31 @@ pub fn timewarp_hash(address: &str, trunk:&str, branch:&str, tag:&str) -> String
     hash_trytes
 }
 
-pub fn calculate_normalized_timewarp_hash(address: &str, trunk:&str, branch:&str) -> (String, String) {    
+pub fn calculate_normalized_timewarp_hash(address: &str, trunk:&str, branch:&str, index:&str, unique_id:&str) -> (String, String) {    
     let mut valid_to_sign = false;
     let mut to_return = String::from("");
+    if index.len() != 5 {
+        warn!("index {} must 9 trytes long", index);
+    }
+    if unique_id.len() != 9 {
+        warn!("Unique id {} must 9 trytes long", unique_id);
+    }
+
     //We include TW on the end of the tag because some libraries (including the rust one)
     //will copy the obsolute tag as the tag field if it is empty. Meaning the tag that actually
     //gets stored in the tangle might be a different one then used for normalizing alternate signing.
-    let mut tag = "9999999999999999999999999TW999999999999999999999999999999999999999999999999999999".trits();
+    let mut tag = ["99999999999", index, unique_id, "TW"].concat().trits();
     while !valid_to_sign {        
-       let hash_trytes = timewarp_hash(address, trunk, branch, &tag.trytes().unwrap()[0..27]);
+       let hash_trytes = timewarp_hash(address, trunk, branch, &tag.trytes().unwrap());
        let normalized = Bundle::normalized_bundle(&hash_trytes);
-        if !normalized.contains(&13) {
+        if !normalized[0..27].contains(&13) { //we can make it lighter since we only use the first 27 trytes for signing (security 1)
             to_return = hash_trytes.to_string();
             valid_to_sign = true;
         }else{
             tag = iota_utils::trit_adder::add(&tag, &[1]);           
         }       
     }
-    (to_return.clone(), tag.trytes().unwrap()[0..27].to_string())
+    (to_return.clone(), tag.trytes().unwrap().to_string())
 }
 
 
@@ -93,7 +113,7 @@ const TEST_TRUNK: &str =
 
 
         let tw_hash = "PYXRFZZVRRLIBFYUPYLCUCBTFJSRIBLJ9CTPCPHCQRWWSYYVBBAZDCHXQNDFEJ9GJSQFIAUCLGPGVPVRX";
-        let tw_hash1 = calculate_normalized_timewarp_hash(&address_me, &trunk, &branch);
+        let tw_hash1 = calculate_normalized_timewarp_hash(&address_me, &trunk, &branch,"99999", "999999999");
         let tw_hash = timewarp_hash(address_me, trunk, branch, tag);
         println!("{} - {} - {}", tw_hash, tw_hash1.0, tw_hash1.1);
         let validated = validate_tw_signature(address_validate, &tw_hash, sig);
@@ -116,7 +136,7 @@ const TEST_TRUNK: &str =
         
         let mut address_b = address_b_trits.trytes().unwrap();
         println!("Step 2");
-        let tw_bundle = calculate_normalized_timewarp_hash(&*address_b, TEST_TRUNK, TEST_TRUNK);
+        let tw_bundle = calculate_normalized_timewarp_hash(&*address_b, TEST_TRUNK, TEST_TRUNK,"99999", "999999999");
         println!("Step 3");
         let signed = sign_tw_hash(&key_a, &tw_bundle.0);
         println!("Step 4");

@@ -166,7 +166,7 @@ fn main() {
     let do_timewarp = &args.contains(&String::from("--timewarp"));
     let only_timewarp = &args.contains(&String::from("--only-timewarp"));
     if *do_timewarp {info!("Timewarping");}
-
+    if *only_timewarp {info!("only_timewarp");}
     let ldr = HoconLoader::new();
     let fll = ldr.load_file(&config_file);
     if fll.is_err() {
@@ -199,7 +199,7 @@ fn main() {
 
         let indexing_actor = sys.actor_of(TimewarpIndexing::props(storage.clone()), TIMEWARP_INDEXING_ACTOR).unwrap();
         indexing_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
-        let temp_actor = sys.actor_of(TimewarpWalker::props(storage.clone()), "timewarp-walking").unwrap();
+        //let temp_actor = sys.actor_of(TimewarpWalker::props(storage.clone()), "timewarp-walking").unwrap();
     }
     //storage_actor.tell(Protocol::AddToIndexPersistence(TimewarpIndexEntry{key: 10, values: vec!["Hallo".to_string(), "world".to_string()]}), None);
    // storage_actor.tell(Protocol::GetFromIndexPersistence(10), None);
