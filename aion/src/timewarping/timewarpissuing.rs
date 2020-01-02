@@ -89,7 +89,8 @@ impl TimewarpIssuer {
 
     fn should_restart(&mut self) -> bool {
         let diff = crate::now() - (SETTINGS.timewarp_issuing_settings.interval_in_seconds * 2);
-        if self.state.latest_index_num() == 0 || diff > self.state.latest_timestamp  {
+        //self.state.latest_index_num() == 0 ||
+        if  diff > self.state.latest_timestamp  {
             return true;
         };
         false
@@ -206,7 +207,7 @@ impl TimewarpIssuer {
                     original_tx: self.state.original_tx.clone(),
                     latest_private_key: key_addres.0,
                     seed: self.state.seed.clone(),
-                    latest_timestamp: tx.timestamp,
+                    latest_timestamp: tx.attachment_timestamp,
                     is_confirmed: false
                 
                 };
@@ -263,7 +264,7 @@ impl TimewarpIssuer {
                     original_tx: tx.hash.to_string(),
                     latest_private_key: key_addres.0,
                     seed: self.state.seed.clone(),
-                    latest_timestamp: tx.timestamp,
+                    latest_timestamp: tx.attachment_timestamp,
                     is_confirmed: false
                 };
         self.storage.save_timewarp_state(new_state.clone());

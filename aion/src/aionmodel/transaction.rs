@@ -26,34 +26,53 @@ pub fn parse_zmqtransaction_ (tx_string:&str) -> Transaction {
     }
 }
 
+pub trait TimewarpTX {
+    fn timewarp_id(&self) -> &str;
+    fn timewarp_index(&self) -> u64;
+}
+
+impl TimewarpTX for iota_lib_rs::iota_model::Transaction {
+    fn timewarp_id(&self) -> &str {
+        &self.tag[16..25]
+    }
+    fn timewarp_index(&self) -> u64 {
+        iota_conversion::long_value(&self.tag[11..16].to_owned().trits()) as u64
+    }
+}
 
 pub fn parse_tx_trytes(trytes:&str, hash:&str) -> iota_lib_rs::iota_model::Transaction {
     let mut transaction = iota_lib_rs::iota_model::Transaction::default();
     let tag:String =  trytes[2592..2619].into();
+    let now = crate::now();
     let transaction_trits = trytes.trits();
-        transaction.hash = String::from(hash);
-        transaction.signature_fragments = if tag.ends_with("TW") { trytes[0..2187].into() } else { "".to_owned() };
-        transaction.address = trytes[2187..2268].into();
-        //transaction.value = iota_conversion::long_value(&transaction_trits[6804..6837]);
-        //transaction.obsolete_tag = trytes[2295..2322].into();
-        transaction.timestamp = iota_conversion::long_value(&transaction_trits[6966..6993]);
-        // transaction.current_index =
-        //     iota_conversion::long_value(&transaction_trits[6993..7020]) as usize;
-        // transaction.last_index =
-        //     iota_conversion::long_value(&transaction_trits[7020..7047]) as usize;
-        // transaction.bundle = trytes[2349..2430].into();
-        transaction.trunk_transaction = trytes[2430..2511].into();
-        transaction.branch_transaction = trytes[2511..2592].into();
-
-        transaction.tag = tag;
-        // transaction.attachment_timestamp =
-        //     iota_conversion::long_value(&transaction_trits[7857..7884]);
-        // transaction.attachment_timestamp_lower_bound =
-        //     iota_conversion::long_value(&transaction_trits[7884..7911]);
-        // transaction.attachment_timestamp_upper_bound =
-        //     iota_conversion::long_value(&transaction_trits[7911..7938]);
-        // transaction.nonce = trytes[2646..2673].into();
+    transaction.hash = String::from(hash);
+    transaction.signature_fragments = if tag.ends_with("TW") { trytes[0..2187].into() } else { "".to_owned() };
+    transaction.address = trytes[2187..2268].into();
+    //transaction.value = iota_conversion::long_value(&transaction_trits[6804..6837]);
+    //transaction.obsolete_tag = trytes[2295..2322].into();
+    transaction.timestamp = iota_conversion::long_value(&transaction_trits[6966..6993]);
+    // transaction.current_index =
+    //     iota_conversion::long_value(&transaction_trits[6993..7020]) as usize;
+    // transaction.last_index =
+    //     iota_conversion::long_value(&transaction_trits[7020..7047]) as usize;
+    // transaction.bundle = trytes[2349..2430].into();
+    transaction.trunk_transaction = trytes[2430..2511].into();
+    transaction.branch_transaction = trytes[2511..2592].into();
+    transaction.tag = tag;
+    transaction.attachment_timestamp =
+         iota_conversion::long_value(&transaction_trits[7857..7884]);
+    // transaction.attachment_timestamp_lower_bound =
+    //     iota_conversion::long_value(&transaction_trits[7884..7911]);
+    // transaction.attachment_timestamp_upper_bound =
+    //     iota_conversion::long_value(&transaction_trits[7911..7938]);
+    transaction.nonce = if transaction.timestamp < now - 120 || transaction.timestamp > now + 120 {
+        // warn!("Transaction timestamp out of bounds");
+        String::from("NO")
+    }else{
+        String::from("")
+    };
     transaction
+    
 }
 
 pub fn parse_zmqtransaction (tx_string:&str) -> iota_lib_rs::iota_model::Transaction {

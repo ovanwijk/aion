@@ -41,8 +41,7 @@ pub struct TimewarpIndexing {
     last_picked_tw: Option<TimewarpData>    
 }
 
-impl Actor for TimewarpIndexing {
-      // we used the #[actor] attribute so CounterMsg is the Msg type
+impl Actor for TimewarpIndexing { 
     type Msg = Protocol;
 
     fn recv(&mut self,
@@ -69,7 +68,7 @@ impl TimewarpIndexing {
         let branch_step = self.tangle.get(&tx.branch_transaction);
         
         if branch_step.is_some() {
-            let diff = tx.timestamp - branch_step.unwrap().timestamp;
+            let diff = tx.attachment_timestamp - branch_step.unwrap().attachment_timestamp;
             if diff > 0 { //Filterout direct references through bundes
                 self.avg_distance = ((self.avg_distance * self.avg_count as f64) + diff as f64) / (self.avg_count + 1) as f64;
                 self.avg_count = self.avg_count + 1;
@@ -78,7 +77,7 @@ impl TimewarpIndexing {
         }
         let trunk_step = self.tangle.get(&tx.trunk_transaction);
          if trunk_step.is_some() {
-            let diff = tx.timestamp - trunk_step.unwrap().timestamp;
+            let diff = tx.attachment_timestamp - trunk_step.unwrap().attachment_timestamp;
             if diff > 0 { //Filterout direct references through bundes
                 self.avg_distance = ((self.avg_distance * self.avg_count as f64) + diff as f64) / (self.avg_count + 1) as f64;
                 self.avg_count = self.avg_count + 1;
@@ -94,8 +93,7 @@ impl TimewarpIndexing {
         if !tx.tag.ends_with("TW"){
            return None;
         }
-        let now = crate::now();
-        if tx.timestamp < now - 120 || tx.timestamp > now + 120 {
+        if tx.nonce == "NO" {
             // warn!("Transaction timestamp out of bounds");
             return None;
         }
@@ -103,7 +101,7 @@ impl TimewarpIndexing {
         //let mut branch_mismatch = false;
         if branch_step.is_some() {
             let branch = branch_step.unwrap();
-            let diff = tx.timestamp - branch.timestamp;
+            let diff = tx.attachment_timestamp - branch.attachment_timestamp;
             if diff > 0 &&  //Filterout direct references through bundles
                 (tx.tag[15..] == branch.tag[15..] || tx.tag[15..] == branch.hash[0..9]) && // Check the if the tag endings are correct
                 diff > SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds &&
@@ -117,7 +115,7 @@ impl TimewarpIndexing {
                         source_hash: tx.hash.clone(),
                         source_branch: tx.branch_transaction.clone(),
                         source_trunk: tx.trunk_transaction.clone(),
-                        source_timestamp: tx.timestamp,
+                        source_timestamp: tx.attachment_timestamp,
                         distance: diff,
                         trunk_or_branch: false
                     })
@@ -131,7 +129,7 @@ impl TimewarpIndexing {
         let trunk_step = self.tangle.get(&tx.trunk_transaction);
         if trunk_step.is_some() {
             let trunk = trunk_step.unwrap();
-            let diff = tx.timestamp - trunk.timestamp;
+            let diff = tx.attachment_timestamp - trunk.attachment_timestamp;
             if diff > 0 && 
                 diff > SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds &&
                 diff < SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
@@ -144,7 +142,7 @@ impl TimewarpIndexing {
                         source_hash: tx.hash.clone(),
                         source_branch: tx.branch_transaction.clone(),
                         source_trunk: tx.trunk_transaction.clone(),
-                        source_timestamp: tx.timestamp,
+                        source_timestamp: tx.attachment_timestamp,
                         distance: diff,
                         trunk_or_branch: true
                     })
@@ -252,7 +250,7 @@ impl TimewarpIndexing {
                         self.known_timewarp_tips.remove(tw.target_hash());
                         self.known_timewarp_tips.insert(tw.source_hash.to_string(), String::new());
                         self.storage.tw_detection_add_decision_data(tw.clone());
-                        self.storage.tw_detection_add_to_index(get_time_key(&cpy.timestamp),
+                        self.storage.tw_detection_add_to_index(get_time_key(&cpy.attachment_timestamp),
                             vec![(tw.source_hash.to_string(), tw.target_hash().to_string())]);
                     }else{
                         info!("Caching lagging timewarp. {}", tw.source_hash.to_string());
@@ -276,7 +274,7 @@ impl TimewarpIndexing {
                         source_branch: cpy.branch_transaction,
                         source_trunk: cpy.trunk_transaction,
                         distance: tw.distance,
-                        source_timestamp: cpy.timestamp, 
+                        source_timestamp: cpy.attachment_timestamp, 
                         trunk_or_branch: tw.trunk_or_branch,
                         last_picked_tw_tx: {
                            if self.last_picked_tw.is_some() {

@@ -15,8 +15,7 @@ pub struct Tangle {
 }
 
 
-impl Tangle {  
-
+impl Tangle {
     pub fn maintain(&mut self) {
         while self.txs_ages.len() > self.max_txs as usize {
             let popping = &self.txs_ages.pop_front().unwrap();

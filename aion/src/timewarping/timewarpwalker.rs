@@ -165,7 +165,7 @@ impl TimewarpWalker {
             
             if tx_.is_some() {              
                 let tx:Transaction = tx_.expect("Transaction");
-                let diff = timestamp - tx.timestamp;
+                let diff = timestamp - tx.attachment_timestamp;
                 if diff >= SETTINGS.timewarp_index_settings.detection_threshold_min_timediff_in_seconds 
                     && diff <= SETTINGS.timewarp_index_settings.detection_threshold_max_timediff_in_seconds {
                     //TODO Validate signature
@@ -197,7 +197,7 @@ impl TimewarpWalker {
                                 trunk_or_branch: timewalk.trunk_or_branch
                             });
                             txid = if timewalk.trunk_or_branch {tx.trunk_transaction.clone() } else {tx.branch_transaction.clone()};
-                            timestamp = tx.timestamp.clone().try_into().unwrap();
+                            timestamp = tx.attachment_timestamp.clone().try_into().unwrap();
                             if txid == timewalk.last_picked_tw_tx {
                                 info!("Found last picked timewarp, stopped searching");
                                 finished = true;

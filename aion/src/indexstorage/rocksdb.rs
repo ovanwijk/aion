@@ -1,5 +1,6 @@
 
 use std::collections::LinkedList;
+use serde_json::json;
 use serde::{Serialize, Deserialize};
 use std::marker::{Send, Sync};
 use riker::actors::*;
@@ -64,11 +65,11 @@ impl Persistence for RocksDBProvider {
             }
         };
         let handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_COLUMN).unwrap();
-        let _r = self.provider.put_cf(handle, tw.source_hash.as_bytes(), bincode::serialize(&tostore).unwrap());
+        let _r = self.provider.put_cf(handle, tw.source_hash.as_bytes(), serde_json::to_vec(&tostore).unwrap());
         
         let mut borrowed_cached = self.FOLLOWED_TW_INDEX_COLUMN_cache.lock().unwrap();
         borrowed_cached.insert(tostore.hash.clone(), tostore.clone());
-
+       
         tostore
     }
     fn tw_detection_get_decision_data(&self, key: String) -> Option<TimewarpData> {
@@ -79,7 +80,7 @@ impl Persistence for RocksDBProvider {
         }else {
             let handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_COLUMN).unwrap();
             let result: Option<TimewarpData> = match self.provider.get_cf(handle,  key.as_bytes()) {                
-                Ok(Some(value)) => Some(bincode::deserialize(&*value).expect("Deserialisation to work")),
+                Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("Deserialisation to work")),
                 Ok(None) => None,
                 Err(e) => {println!("operational problem encountered: {}", e);
                 None},
@@ -98,14 +99,15 @@ impl Persistence for RocksDBProvider {
 
    
     fn save_timewarp_state(&self, state: TimewarpIssuingState) {
+        
         let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
-        let _r = self.provider.put_cf(handle, TW_ISSUING_STATE.as_bytes(), bincode::serialize(&state).unwrap());
+        let _r = self.provider.put_cf(handle, TW_ISSUING_STATE.as_bytes(), serde_json::to_vec(&state).unwrap()).unwrap();
     }
     fn get_timewarp_state(&self) -> Option<TimewarpIssuingState> {
         let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
         
         match self.provider.get_cf(handle,  TW_ISSUING_STATE.as_bytes()) {                
-                Ok(Some(value)) => Some(bincode::deserialize(&*value).unwrap()),
+                Ok(Some(value)) => Some(serde_json::from_slice(&*value).unwrap()),
                 Ok(None) => None,
                 Err(e) => {println!("operational problem encountered: {}", e);
                 None},
@@ -121,10 +123,10 @@ impl Persistence for RocksDBProvider {
         for v in values.iter() {            
             data.insert(v.0.to_string(), v.1.to_string());
         }
-       // values.iter().map(|v| d;
+       
         if !data.is_empty() {
-            //let concatted = data.iter().fold(String::from(""), |mut a, b| {a.push_str(","); a.push_str(b ); a})[1..].to_string();
-            let _r = self.provider.put_cf(handle, key.to_be_bytes(), bincode::serialize(&data).unwrap());
+            
+            let _r = self.provider.put_cf(handle, key.to_be_bytes(), serde_json::to_vec(&data).unwrap());
             self.TW_DETECTION_RANGE_TX_INDEX_COLUMN_cache.lock().unwrap().insert(key, data);
         }
         
@@ -140,7 +142,7 @@ impl Persistence for RocksDBProvider {
             let handle = self.provider.cf_handle(TW_DETECTION_RANGE_TX_INDEX_COLUMN).unwrap();
 
             let result = match self.provider.get_cf(handle, key.to_be_bytes()) {                
-                Ok(Some(value)) => bincode::deserialize(&*value).unwrap(),
+                Ok(Some(value)) => serde_json::from_slice(&*value).unwrap(),
                 Ok(None) => HashMap::new(),
                 Err(e) => {println!("operational problem encountered: {}", e);
                 HashMap::new()},
@@ -169,7 +171,7 @@ impl Persistence for RocksDBProvider {
             Ok(Some(value)) => {
                 let local_result = match self.provider.get_cf(handle, &*value) {
                     Ok(Some(value_two)) => {
-                        let res: Option<TimewarpData> = bincode::deserialize(&*value_two).unwrap();
+                        let res: Option<TimewarpData> = serde_json::from_slice(&*value_two).unwrap();
                         res
                     }
                     Ok(None) => None,
@@ -197,7 +199,7 @@ impl Persistence for RocksDBProvider {
             let handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_RANGE_COLUMN).unwrap();
 
             let result = match self.provider.get_cf(handle, key.to_be_bytes()) {                
-                Ok(Some(value)) => bincode::deserialize(&*value).unwrap(),
+                Ok(Some(value)) => serde_json::from_slice(&*value).unwrap(),
                 Ok(None) => HashMap::new(),
                 Err(e) => {println!("operational problem encountered: {}", e);
                 HashMap::new()},
@@ -225,20 +227,20 @@ impl Persistence for RocksDBProvider {
                 }
                 if unwrapped.hash == *timewarp.target_hash() {
                    
-                    let _1 = &batch.put_cf(handle, timewarp.hash.as_bytes(), bincode::serialize(&timewarp).unwrap());
+                    let _1 = &batch.put_cf(handle, timewarp.hash.as_bytes(), serde_json::to_vec(&timewarp).unwrap());
                     let mut range_map = self.get_picked_tw_index(get_time_key(&timewarp.timestamp));
                     range_map.insert(timewarp.hash.clone(), timewarp.target_hash());
-                    let _2 = &batch.put_cf(range_handle, get_time_key(&timewarp.timestamp).to_be_bytes(), bincode::serialize(&range_map).unwrap());
+                    let _2 = &batch.put_cf(range_handle, get_time_key(&timewarp.timestamp).to_be_bytes(),serde_json::to_vec(&range_map).unwrap());
                     
                     cache_updates.insert(get_time_key(&timewarp.timestamp), range_map);
                 } else {
                     return Err("Not a connecting timewarp. Source and target transaction are not matching.".to_string());
                 }
             } else {
-                let _l = &batch.put_cf(handle, timewarp.hash.as_bytes(), bincode::serialize(&timewarp).unwrap());
+                let _l = &batch.put_cf(handle, timewarp.hash.as_bytes(), serde_json::to_vec(&timewarp).unwrap());
                 let mut range_map = self.get_picked_tw_index(get_time_key(&timewarp.timestamp));
                 range_map.insert(timewarp.hash.clone(), timewarp.target_hash());
-                let _2 = &batch.put_cf(range_handle, get_time_key(&timewarp.timestamp).to_be_bytes(), bincode::serialize(&range_map).unwrap());
+                let _2 = &batch.put_cf(range_handle, get_time_key(&timewarp.timestamp).to_be_bytes(), serde_json::to_vec(&range_map).unwrap());
                     
                 cache_updates.insert(get_time_key(&timewarp.timestamp), range_map);
             }
