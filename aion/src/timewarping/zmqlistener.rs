@@ -6,8 +6,8 @@ use std::collections::LinkedList;
 use riker::actors::*;
 use riker::actors::Context;
 use std::time::Duration;
-use aionmodel::transaction::*;
-use timewarping::Protocol;
+use crate::aionmodel::transaction::*;
+use crate::timewarping::Protocol;
 use crate::SETTINGS;
 
 #[derive(Clone, Debug)]

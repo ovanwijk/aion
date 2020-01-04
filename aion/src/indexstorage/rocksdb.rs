@@ -7,11 +7,11 @@ use riker::actors::*;
 use riker::actors::Context;
 use std::convert::TryInto;
 use std::sync::Mutex;
-use timewarping::Protocol;
+use crate::timewarping::Protocol;
 
-use indexstorage::*;
+use crate::indexstorage::*;
 use crate::SETTINGS;
-use rocksdb::{DB, Options, WriteBatch};
+use ::rocksdb::{DB, Options, WriteBatch};
 use std::{
     collections::{HashMap, HashSet}};
 use lru_cache::LruCache;
@@ -107,7 +107,7 @@ impl Persistence for RocksDBProvider {
         let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
         
         match self.provider.get_cf(handle,  TW_ISSUING_STATE.as_bytes()) {                
-                Ok(Some(value)) => Some(serde_json::from_slice(&*value).unwrap()),
+                Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("get_timewarp_state")),
                 Ok(None) => None,
                 Err(e) => {println!("operational problem encountered: {}", e);
                 None},

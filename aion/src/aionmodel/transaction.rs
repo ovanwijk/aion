@@ -60,7 +60,7 @@ pub fn parse_tx_trytes(trytes:&str, hash:&str) -> iota_lib_rs::iota_model::Trans
     transaction.branch_transaction = trytes[2511..2592].into();
     transaction.tag = tag;
     transaction.attachment_timestamp =
-         iota_conversion::long_value(&transaction_trits[7857..7884]);
+         iota_conversion::long_value(&transaction_trits[7857..7884]) / 1000;
     // transaction.attachment_timestamp_lower_bound =
     //     iota_conversion::long_value(&transaction_trits[7884..7911]);
     // transaction.attachment_timestamp_upper_bound =

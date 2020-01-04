@@ -6,11 +6,11 @@ use std::sync::Arc;
 use riker::actors::*;
 use riker::actors::Context;
 use std::convert::TryInto;
-use timewarping::Protocol;
-use timewarping::zmqlistener::RegisterZMQListener;
-use indexstorage::TimewarpIssuingState;
+use crate::timewarping::Protocol;
+use crate::timewarping::zmqlistener::RegisterZMQListener;
+use crate::indexstorage::TimewarpIssuingState;
 use crate::SETTINGS;
-use indexstorage::{get_time_key, Persistence};
+use crate::indexstorage::{get_time_key, Persistence};
 //use iota_client::options::;
 use iota_lib_rs::prelude::*;
 use iota_utils::generate_new_seed;
@@ -20,9 +20,9 @@ use iota_client::options::*;
 use iota_model::{Transaction,Transfer};
 use iota_conversion::trytes_converter;
 use std::collections::HashMap;
-use timewarping::signing::*;
+use crate::timewarping::signing::*;
 
-use crate::Result;
+//use crate::Result;
 
 
 
@@ -207,7 +207,7 @@ impl TimewarpIssuer {
                     original_tx: self.state.original_tx.clone(),
                     latest_private_key: key_addres.0,
                     seed: self.state.seed.clone(),
-                    latest_timestamp: tx.attachment_timestamp,
+                    latest_timestamp: tx.attachment_timestamp / 1000,
                     is_confirmed: false
                 
                 };
@@ -264,7 +264,7 @@ impl TimewarpIssuer {
                     original_tx: tx.hash.to_string(),
                     latest_private_key: key_addres.0,
                     seed: self.state.seed.clone(),
-                    latest_timestamp: tx.attachment_timestamp,
+                    latest_timestamp: tx.attachment_timestamp / 1000,
                     is_confirmed: false
                 };
         self.storage.save_timewarp_state(new_state.clone());

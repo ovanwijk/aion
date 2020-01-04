@@ -1,4 +1,5 @@
 
+
 #[macro_use]
 extern crate actix_web;
 extern crate zmq;
@@ -16,16 +17,22 @@ extern crate lru_cache;
 #[macro_use] extern crate log;
 extern crate env_logger;
 extern crate failure;
+extern crate futures;
 
-type Result<T> = ::std::result::Result<T, failure::Error>;
+//type Result<T> = ::std::result::Result<T, failure::Error>;
 mod timewarping;
 mod aionmodel;
 mod indexstorage;
 mod pathway;
+mod webapi;
+use futures::executor::block_on;
 use std::time::{SystemTime, UNIX_EPOCH};
 use lazy_static::*;
 use iota_lib_rs::*;
-use actix_web::{web, App, HttpServer, HttpRequest, HttpResponse, Responder};
+use actix_web::{
+    error, guard, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer,
+    Result,
+};
 use riker::actors::*;
 use hocon::HoconLoader;
 use std::*;
@@ -40,6 +47,12 @@ use timewarping::timewarpissuing::*;
 
 use timewarping::Protocol;
 use serde_derive::{Deserialize, Serialize};
+
+// use actix_web::{
+//     error, guard, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
+//     Result,
+// };
+
 //fn index(info: web::Path<(u32, String)>) -> impl Responder {
 //    format!("Hello {}! id:{}", info.1, info.0)
 //}
@@ -99,7 +112,11 @@ pub struct TimewarpIndexSettings {
     detection_threshold_switch_timewarp_in_seconds: i64,
     time_index_clustering_in_seconds: i64,
     time_index_max_length_in_seconds: i64,
-    time_index_database_location: String
+    time_index_database_location: String,
+    selection_idle_timeout_in_seconds: i64,
+    selection_switch_delay_in_seconds: i64,
+    selection_better_option_reference_delay_in_seconds: i64,
+    selection_xor_key: String
 }
 
 
@@ -139,7 +156,11 @@ lazy_static! {
                     detection_threshold_switch_timewarp_in_seconds: lconfig["timewarp_indexing"]["detection_threshold_switch_timewarp_in_seconds"].as_i64().unwrap() ,
                     time_index_clustering_in_seconds: lconfig["timewarp_indexing"]["time_index_clustering_in_seconds"].as_i64().unwrap(),
                     time_index_max_length_in_seconds: lconfig["timewarp_indexing"]["time_index_max_length_in_seconds"].as_i64().unwrap(),
-                    time_index_database_location: lconfig["timewarp_indexing"]["time_index_database_location"].as_string().unwrap()
+                    time_index_database_location: lconfig["timewarp_indexing"]["time_index_database_location"].as_string().unwrap(),
+                    selection_idle_timeout_in_seconds: 60,
+                    selection_switch_delay_in_seconds: 60,
+                    selection_better_option_reference_delay_in_seconds: 60,
+                    selection_xor_key: "".to_string()
                 },
                 timewarp_issuing_settings: TimewarpIssuingSettings {
                     interval_in_seconds: lconfig["timewarp_issuing"]["interval_in_seconds"].as_i64().unwrap(),
@@ -153,7 +174,23 @@ lazy_static! {
         }
     };
 }
-fn main() {
+
+pub struct APIActors {
+    storage: Arc<dyn Persistence>,
+    timewarp_indexing: Option<ActorRef<timewarping::Protocol>>
+
+}
+
+pub async fn index(req:HttpRequest) ->  Result<HttpResponse, Error>   {
+  
+    Ok(HttpResponse::Ok()
+     .content_type("text/plain")
+     .body(format!("Hello {}!", "world")))
+    }
+    
+
+#[actix_rt::main]
+async fn main() -> io::Result<()> {
     env_logger::init();
     let args: Vec<String> = env::args().collect();
     info!("{:?}", args);
@@ -173,14 +210,14 @@ fn main() {
     if fll.is_err() {
         let herror = fll.unwrap_err();
         println!("{}", herror);
-        return ()
+        return Ok(());
     }
     unsafe{
         let hcon = fll.unwrap().hocon();
          if hcon.is_err() {
             let herror = hcon.unwrap_err();
             println!("{}", herror);
-            return ()
+            return Ok(());
         }
         HOCON_CONFIG = Some(hcon.unwrap());
     }
@@ -226,14 +263,34 @@ fn main() {
     //std::thread::sleep(time::Duration::from_millis(2500));
 
     println!("Going to wait...");
-    io::stdin().read_line(&mut String::new()).unwrap();
+   // io::stdin().read_line(&mut String::new()).unwrap();
     //timewarping::start();
 
-    // HttpServer::new(
-    //     || App::new().service(
-    //           web::resource("/{id}/{name}/index.html").to(index)))
-    //     .bind("0.0.0.0:8080")
-    //     .run();
+
+    
+
+    // HttpServer::new(|| 
+    //     App::new()
+    //     .service(
+    //         web::resource("/test").to(|req: HttpRequest| match *req.method() {
+    //             Method::GET => HttpResponse::Ok(),
+    //             Method::POST => HttpResponse::MethodNotAllowed(),
+    //             _ => HttpResponse::NotFound(),
+    //         })))
+    //     .bind("127.0.0.1:0")?
+    //     .run()
+    //     .await
+    
+    HttpServer::new(
+        move || App::new().data(APIActors {
+            storage: storage.clone(),
+            timewarp_indexing: None
+        }).service(webapi::index)
+            // .service(
+            //   web::resource("/test").route(web::get().to(index)))
+            )
+        .bind("0.0.0.0:8080")?
+        .run().await
 
 
 }

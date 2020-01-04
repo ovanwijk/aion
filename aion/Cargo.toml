@@ -2,11 +2,14 @@
 name = "aion"
 version = "0.1.0"
 authors = ["olaf <o_van_wijk@hotmail.com>"]
-
+edition = "2018"
 [dependencies]
 zmq = "0.9.1"
-actix-web = "1.0.7"
+actix-rt = "1.0.0"
+actix-web = "2.0.0"
 riker = "0.3.1"
+futures = "^0.3"
+#riker-patterns = "^0.3.0"
 reqwest = "0.9.22"
 iota-lib-rs = { path = "../../iota.rs" } #"0.4.1"
 lazy_static = "1.4.0"

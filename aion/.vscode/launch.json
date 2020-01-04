@@ -22,7 +22,8 @@
             },
             
             "env": {
-                "RUST_LOG": "info"
+                "RUST_LOG": "info",
+                "RUST_BACKTRACE": "1"
             },
            
           

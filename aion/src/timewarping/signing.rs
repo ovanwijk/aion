@@ -1,11 +1,11 @@
 
-use iota_signing::*;
-use iota_conversion::{Trinary,long_value};
-use iota_constants;
-use iota_utils;
+use crate::iota_signing::*;
+use crate::iota_conversion::{Trinary,long_value};
+use crate::iota_constants;
+use crate::iota_utils;
 
-use iota_crypto::{Kerl, Sponge};
-use iota_model::Bundle;
+use crate::iota_crypto::{Kerl, Sponge};
+use crate::iota_model::Bundle;
 use iota_constants::HASH_TRINARY_SIZE;
 use std::cmp;
 
