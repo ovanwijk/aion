@@ -197,18 +197,26 @@ impl TimewarpIndexing {
         id: String,
         timewarps: Vec<Timewarp>,
         _sender: Sender) {
-        
+        info!("Got timewalk result");
         //We need to reverse the insertion order for the found timewarp. The walker walks from present to past but we want to insert from
         //Past to present to keep statistics.
         for v in timewarps.iter().rev() {
-            self.storage.tw_detection_add_decision_data(v.clone());
-            let _res = self.storage.tw_detection_add_to_index(get_time_key(&v.source_timestamp), vec![(v.source_hash.to_string(), v.target_hash().to_string())]);
+            let tw_data = self.storage.tw_detection_add_decision_data(v.clone());
+            let _res = self.storage.tw_detection_add_to_index(get_time_key(&v.source_timestamp), 
+                vec![
+                    (v.source_hash.to_string(), v.target_hash().to_string()), 
+                    (format!("{}{}", TIMEWARP_ID_PREFIX, tw_data.timewarpid), tw_data.hash.to_string())
+                ]);
         }
         //Here we don't need to reverse because they get in the correct order.
         for v in self.known_active_walks.get(&id).expect("The vec to exists even when empty") {
             info!("Inserting lagging timewarp.");
-            self.storage.tw_detection_add_decision_data(v.clone());
-            let _res = self.storage.tw_detection_add_to_index(get_time_key(&v.source_timestamp), vec![(v.source_hash.to_string(), v.target_hash().to_string())]);
+            let tw_data = self.storage.tw_detection_add_decision_data(v.clone());
+            let _res = self.storage.tw_detection_add_to_index(get_time_key(&v.source_timestamp), 
+                vec![
+                    (v.source_hash.to_string(), v.target_hash().to_string()), 
+                    (format!("{}{}",TIMEWARP_ID_PREFIX, tw_data.timewarpid), tw_data.hash.to_string())
+                ]);
         }
 
         let _a = self.known_active_walks.remove(&id);
@@ -249,9 +257,17 @@ impl TimewarpIndexing {
                         info!("Found a known timewarp Old: {} and new {}", tw.target_hash().to_string(), tw.source_hash.to_string());
                         self.known_timewarp_tips.remove(tw.target_hash());
                         self.known_timewarp_tips.insert(tw.source_hash.to_string(), String::new());
-                        self.storage.tw_detection_add_decision_data(tw.clone());
-                        self.storage.tw_detection_add_to_index(get_time_key(&cpy.attachment_timestamp),
-                            vec![(tw.source_hash.to_string(), tw.target_hash().to_string())]);
+
+                        let tw_data = self.storage.tw_detection_add_decision_data(tw.clone());
+                        let _res = self.storage.tw_detection_add_to_index(get_time_key(&tw.source_timestamp), 
+                            vec![
+                                (tw.source_hash.to_string(), tw.target_hash().to_string()), 
+                                (format!("{}{}", TIMEWARP_ID_PREFIX, tw_data.timewarpid), tw_data.hash.to_string())
+                            ]);
+
+                        // self.storage.tw_detection_add_decision_data(tw.clone());
+                        // self.storage.tw_detection_add_to_index(get_time_key(&cpy.attachment_timestamp),
+                        //     vec![(tw.source_hash.to_string(), tw.target_hash().to_string())]);
                     }else{
                         info!("Caching lagging timewarp. {}", tw.source_hash.to_string());
 

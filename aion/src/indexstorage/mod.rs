@@ -3,6 +3,7 @@ use crate::SETTINGS;
 use serde::{Serialize, Deserialize};
 use crate::timewarping::signing::*;
 pub mod rocksdb;
+use std::sync::Arc;
 
 use std::marker::{Send, Sync};
 use std::{
@@ -14,6 +15,8 @@ pub fn get_time_key(timestamp:&i64) -> i64 {
 use iota_lib_rs::iota_conversion;
 
 
+pub const TIMEWARP_ID_PREFIX:&str = "TW_ID";
+
 pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
     let mut to_return:Vec<i64> = vec![];
     let mut next = get_time_key(start);
@@ -21,6 +24,38 @@ pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
         to_return.push(next + SETTINGS.timewarp_index_settings.time_index_clustering_in_seconds as i64);
         next = next + SETTINGS.timewarp_index_settings.time_index_clustering_in_seconds as i64;
     }
+    to_return
+}
+
+pub fn get_n_timewarp_transactions(timewarp_id:String, n:i32, st: Arc<dyn Persistence>) -> Vec<String> {
+
+    let mut result:Vec<String> = vec!();
+    let mut counter = 0;
+    result.push(timewarp_id.to_string());
+    while counter < n {
+        let r = st.tw_detection_get_decision_data(result.last().unwrap().to_string());
+        if r.is_some() {
+            result.push(r.unwrap().target_hash());
+            counter +=1 ;
+        }else{
+            counter = n;
+        }
+    }
+    result
+}
+
+
+pub fn get_lastest_known_timewarps(st: Arc<dyn Persistence>) -> Vec<TimewarpData> {
+    let timewindow_key = get_time_key(&crate::now());
+    let a  = st.tw_detection_get(&timewindow_key);
+    let mut to_return:Vec<TimewarpData> = vec!();
+    for (_k, v) in a.iter().filter(|&(k, _v)| k.starts_with(&TIMEWARP_ID_PREFIX)) {
+        let t_result = st.tw_detection_get_decision_data(v.to_string());
+        if t_result.is_some() {
+            to_return.push(t_result.unwrap());
+        }
+    }
+    to_return.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     to_return
 }
 

@@ -113,13 +113,16 @@ impl TimewarpWalker {
                 _msg: StartTimewarpWalking,
                 _sender: Sender) {
             
+            info!("Start walking");
             self.timewarp_state = _msg.clone();
             // self.reply_to = _sender;
             let id = _msg.id();
             let result = self.walk(_msg);
             if _sender.is_some() {
+                info!("Done walking, sending result: {}", result.len());
                 let _l = _sender.unwrap().try_tell(Protocol::TimewarpWalkingResult(id, result), _ctx.myself());
             }
+            info!("Killing self");
             _ctx.stop(_ctx.myself());
             //let result = self.walk(_msg);
             //println!("Found timewalk with depth: {}", result.len());
@@ -154,6 +157,7 @@ impl TimewarpWalker {
                     let tx:Transaction = crate::aionmodel::transaction::parse_tx_trytes(&tx_trytes, &txid);
                     //We only care about signed messages
                     if tx.signature_fragments == "" ||  tx.signature_fragments.starts_with("999999999999999999999999999999999999999999999999999999999999999999999999999999999") {
+                        //start of timewarp
                         None
                     }else{
                         Some(tx)
@@ -228,7 +232,11 @@ impl TimewarpWalker {
              
                println!("Got transaction!");
                
-           }
+           }else{
+            //nothing to see possibly beginning of timewarp. Set timewarpID
+            info!("Is none {}", txid.to_owned());
+            finished = true;
+        }
         }
        
 

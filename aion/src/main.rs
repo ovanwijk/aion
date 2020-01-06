@@ -177,17 +177,10 @@ lazy_static! {
 
 pub struct APIActors {
     storage: Arc<dyn Persistence>,
-    timewarp_indexing: Option<ActorRef<timewarping::Protocol>>
+    actor_system: Arc<ActorSystem>
 
 }
 
-pub async fn index(req:HttpRequest) ->  Result<HttpResponse, Error>   {
-  
-    Ok(HttpResponse::Ok()
-     .content_type("text/plain")
-     .body(format!("Hello {}!", "world")))
-    }
-    
 
 #[actix_rt::main]
 async fn main() -> io::Result<()> {
@@ -280,12 +273,18 @@ async fn main() -> io::Result<()> {
     //     .bind("127.0.0.1:0")?
     //     .run()
     //     .await
-    
+    let arc_system = Arc::new(sys);
     HttpServer::new(
         move || App::new().data(APIActors {
             storage: storage.clone(),
-            timewarp_indexing: None
-        }).service(webapi::index)
+            actor_system: arc_system.clone()
+        })
+        .service(webapi::timewarpstateFn)
+        .service(webapi::timewarpsFn)
+        .service(webapi::timewarpIdFn)
+        .service(webapi::timewarpIdMaxFn)
+
+        
             // .service(
             //   web::resource("/test").route(web::get().to(index)))
             )
