@@ -9,6 +9,7 @@
 use crate::SETTINGS;
 use riker::actors::*;
 use riker::actors::Context;
+use crate::iota_api::*;
 //use iota_lib_rs::iota_model::Transaction;
 //use crate::aionmodel::tangle::*;
 use crate::indexstorage::Persistence;

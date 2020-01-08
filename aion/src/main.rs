@@ -23,6 +23,7 @@ mod aionmodel;
 mod indexstorage;
 mod pathway;
 mod webapi;
+mod iota_api;
 use futures::executor::block_on;
 use std::time::{SystemTime, UNIX_EPOCH};
 use lazy_static::*;
@@ -231,7 +232,8 @@ async fn main() -> io::Result<()> {
 
     let sys = ActorSystem::new().unwrap();
    
-    
+    // let _a = crate::iota::pin_transaction_hash(SETTINGS.node_settings.iri_connection(),
+    //      vec!("AQEXQMGPTUARFAYMMHNJMNKQGQCRSTZGSUOMGG9CIOOMTHP99KMYVUHJTEGZKXLCVBBFLEMTUIMCAQFG9".to_string())).await;
     let zmq_actor = sys.actor_of(ZMQListener::props(), ZMQ_LISTENER_ACTOR).unwrap();
     let tw_selection_actor = sys.actor_of(TimewarpSelecting::props(storage.clone()), TIMEWARP_SELECTION_ACTOR).unwrap();
     tw_selection_actor.clone().tell(Protocol::Timer, None);
