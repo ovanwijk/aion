@@ -48,6 +48,13 @@ impl Actor for TimewarpIssuer {
             Protocol::RegisterZMQListener(__msg) => self.receive_registerzmqlistener(ctx, __msg, sender),
             Protocol::Start => self.receive_step(ctx,  sender),
             Protocol::Timer => self.receive_step(ctx, sender),
+            Protocol::Ping => {
+                info!("Ping");
+                let _l = sender.unwrap().try_tell(Protocol::Pong, None);
+            },
+            Protocol::Pong => {
+                info!("Pong");
+            }
             Protocol::TransactionConfirmed(__msg) => self.receive_transactionconfimation(ctx, __msg, sender),
             _ => ()
         }

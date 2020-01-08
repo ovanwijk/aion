@@ -1,19 +1,19 @@
 
-use std::collections::LinkedList;
-use serde_json::json;
-use serde::{Serialize, Deserialize};
+// use std::collections::LinkedList;
+// use serde_json::json;
+// use serde::{Serialize, Deserialize};
 use std::marker::{Send, Sync};
-use riker::actors::*;
-use riker::actors::Context;
-use std::convert::TryInto;
+// use riker::actors::*;
+// use riker::actors::Context;
+//use std::convert::TryInto;
 use std::sync::Mutex;
-use crate::timewarping::Protocol;
+//use crate::timewarping::Protocol;
 
 use crate::indexstorage::*;
 use crate::SETTINGS;
 use ::rocksdb::{DB, Options, WriteBatch};
 use std::{
-    collections::{HashMap, HashSet}};
+    collections::{HashMap}};
 use lru_cache::LruCache;
 
 const TW_DETECTION_RANGE_TX_INDEX_COLUMN:&str = "TW_DETECTION_RANGE_TX_INDEX_COLUMN";
@@ -26,8 +26,6 @@ const FLEXIBLE_ZERO:&str = "FLEXIBLE_ZERO";
 const PERSISTENT_CACHE:&str = "PERSISTENT_CACHE";
 //Persistent cache keys:
 
-const LAST_PICKED_TW_ID:&str = "LAST_PICKED_TW_ID";
-const TW_ISSUING_STATE:&str = "TW_ISSUING_STATE";
 
 
 #[derive(Debug)]
@@ -213,6 +211,7 @@ impl Persistence for RocksDBProvider {
         }
     }
 
+    //TODO Make sure this function works.
     fn add_last_picked_tw(&self, timewarps: Vec<TimewarpData>) -> Result<(), String> {
         let handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_COLUMN).unwrap();
         let range_handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_RANGE_COLUMN).unwrap();

@@ -1,7 +1,5 @@
-
-
 #[macro_use]
-extern crate actix_web;
+extern crate actix_web; 
 extern crate zmq;
 extern crate lazy_static;
 extern crate serde_derive;
@@ -44,6 +42,7 @@ use timewarping::zmqlistener::*;
 use timewarping::timewarpindexing::*;
 use timewarping::timewarpwalker::*;
 use timewarping::timewarpissuing::*;
+use timewarping::timewarpselecting::*;
 
 use timewarping::Protocol;
 use serde_derive::{Deserialize, Serialize};
@@ -61,6 +60,7 @@ pub const STORAGE_ACTOR:&str = "storage-actor";
 pub const ZMQ_LISTENER_ACTOR:&str = "zmq-actor";
 pub const TIMEWARP_INDEXING_ACTOR:&str = "timewarp-actor";
 pub const TIMEWARP_ISSUER_ACTOR:&str = "timewarp-issuer-actor";
+pub const TIMEWARP_SELECTION_ACTOR:&str = "timewarp-selection-actor";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct AppSettings {
@@ -175,11 +175,21 @@ lazy_static! {
     };
 }
 
+// struct AskActor {
+//     future: Future<>
+// }
+
 pub struct APIActors {
     storage: Arc<dyn Persistence>,
-    actor_system: Arc<ActorSystem>
-
+    actor_system: Arc<ActorSystem>,
+    tw_selecting: riker::actor::ActorRef<timewarping::Protocol>
 }
+
+// impl APIActors {
+//     pub async fn ask_pattern (&self, actor:riker::actor::ActorRef<timewarping::Protocol>) -> timewarping::Protocol {
+//         self.actor_system.
+//     }
+// }
 
 
 #[actix_rt::main]
@@ -223,7 +233,8 @@ async fn main() -> io::Result<()> {
    
     
     let zmq_actor = sys.actor_of(ZMQListener::props(), ZMQ_LISTENER_ACTOR).unwrap();
-  
+    let tw_selection_actor = sys.actor_of(TimewarpSelecting::props(storage.clone()), TIMEWARP_SELECTION_ACTOR).unwrap();
+    tw_selection_actor.clone().tell(Protocol::Timer, None);
    //  let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
     if !only_timewarp {
@@ -243,13 +254,13 @@ async fn main() -> io::Result<()> {
     //{ zmq_listener: BasicActorRef::from(my_actor1.clone())}
     
    
-    if *do_timewarp || *only_timewarp {
+    let tw_issuing_actor = if *do_timewarp || *only_timewarp {
         info!("Start timewarping");
         let timewarp_actor = &sys.actor_of(TimewarpIssuer::props(storage.clone()), TIMEWARP_ISSUER_ACTOR).unwrap();
         &timewarp_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
         &timewarp_actor.tell(Protocol::Start, None);
-        
-    };
+        Some(timewarp_actor.clone())
+    }else{ None };
     let _zmq_listner_result = BasicActorRef::from(zmq_actor).try_tell(Protocol::StartListening(StartListening{host:"Hello my actor!".to_string()}),None);
   //  my_actor1_2.tell(ZMQListenerMsg::StartListening(StartListening{host:"Hello my actor!".to_string()}), None);
 
@@ -277,12 +288,15 @@ async fn main() -> io::Result<()> {
     HttpServer::new(
         move || App::new().data(APIActors {
             storage: storage.clone(),
-            actor_system: arc_system.clone()
+            actor_system: arc_system.clone(),
+            tw_selecting: tw_selection_actor.clone()
         })
+        .service(webapi::timewarpPickedFn)
         .service(webapi::timewarpstateFn)
         .service(webapi::timewarpsFn)
         .service(webapi::timewarpIdFn)
         .service(webapi::timewarpIdMaxFn)
+        
 
         
             // .service(

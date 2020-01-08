@@ -7,7 +7,7 @@ use crate::iota_utils;
 use crate::iota_crypto::{Kerl, Sponge};
 use crate::iota_model::Bundle;
 use iota_constants::HASH_TRINARY_SIZE;
-use std::cmp;
+//use std::cmp;
 
 
 

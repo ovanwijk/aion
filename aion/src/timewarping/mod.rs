@@ -3,7 +3,8 @@ pub mod timewarpindexing;
 pub mod timewarpwalker;
 pub mod signing;
 pub mod timewarpissuing;
-use serde::{Serialize, Deserialize};
+pub mod timewarpselecting;
+use serde::{Serialize};
 
 
 
@@ -11,6 +12,8 @@ use serde::{Serialize, Deserialize};
 pub enum Protocol {
     RegisterRoutee,
     Start,
+    Ping,
+    Pong,
     Timer,
     StartTimewarpWalking(timewarpwalker::StartTimewarpWalking),
     TimewarpWalkingResult(String, Vec<Timewarp>),
@@ -18,8 +21,18 @@ pub enum Protocol {
     StartListening(zmqlistener::StartListening),
     NewTransaction(zmqlistener::NewTransaction),
     TransactionConfirmed(String),
-    RegisterZMQListener(zmqlistener::RegisterZMQListener)
+    RegisterZMQListener(zmqlistener::RegisterZMQListener),
+    WebReply(String),
+    WebRequest(WebRequestType)
+
 }
+
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum WebRequestType {
+    PickedTimewarp
+}
+
 
 #[derive(Clone, Debug)]
 pub struct Timewarp {

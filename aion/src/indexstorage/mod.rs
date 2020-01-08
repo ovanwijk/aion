@@ -17,6 +17,10 @@ use iota_lib_rs::iota_conversion;
 
 pub const TIMEWARP_ID_PREFIX:&str = "TW_ID";
 
+pub const LAST_PICKED_TW_ID:&str = "LAST_PICKED_TW_ID";
+pub const TW_ISSUING_STATE:&str = "TW_ISSUING_STATE";
+
+
 pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
     let mut to_return:Vec<i64> = vec![];
     let mut next = get_time_key(start);
@@ -47,11 +51,18 @@ pub fn get_n_timewarp_transactions(timewarp_id:String, n:i32, st: Arc<dyn Persis
 
 pub fn get_lastest_known_timewarps(st: Arc<dyn Persistence>) -> Vec<TimewarpData> {
     let timewindow_key = get_time_key(&crate::now());
-    let a  = st.tw_detection_get(&timewindow_key);
+    let mut a  = st.tw_detection_get(&timewindow_key);
+    let mut counter = 1;
+    while a.len() == 0 && counter < 100 {
+        a = st.tw_detection_get(&(timewindow_key - (SETTINGS.timewarp_index_settings.time_index_clustering_in_seconds * counter)));
+        counter += 1;
+    }
+    
     let mut to_return:Vec<TimewarpData> = vec!();
     for (_k, v) in a.iter().filter(|&(k, _v)| k.starts_with(&TIMEWARP_ID_PREFIX)) {
         let t_result = st.tw_detection_get_decision_data(v.to_string());
         if t_result.is_some() {
+            
             to_return.push(t_result.unwrap());
         }
     }
@@ -140,7 +151,7 @@ impl TimewarpData {
             timestamp_deviation_factor: -1.0,
             distance: new_data.distance,
             index_since_id: self.index_since_id + 1,
-            avg_distance: ((self.distance * 9) + new_data.distance) / 10,
+            avg_distance: ((self.avg_distance * self.index_since_id) + new_data.distance) / (self.index_since_id+1),
             trunk_or_branch: self.trunk_or_branch
         }
      }
@@ -150,6 +161,10 @@ impl TimewarpData {
         }else{
             self.branch.clone()
         }
+    }
+
+    pub fn score(&self) -> usize {
+        (self.index_since_id * self.avg_distance) as usize
     }
  }
 

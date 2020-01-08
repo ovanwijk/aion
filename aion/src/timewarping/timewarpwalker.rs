@@ -1,6 +1,6 @@
 
 
-use std::collections::LinkedList;
+
 use std::sync::Arc;
 
 use riker::actors::*;
@@ -13,11 +13,11 @@ use crate::SETTINGS;
 use crate::indexstorage::{get_time_key, Persistence};
 //use iota_client::options::;
 use iota_lib_rs::prelude::*;
-use iota_lib_rs::iota_client::*;
+//use iota_lib_rs::iota_client::*;
 use iota_model::Transaction;
 use crate::timewarping::signing;
-use iota_conversion::trytes_converter;
-use std::collections::HashMap;
+// use iota_conversion::trytes_converter;
+// use std::collections::HashMap;
 
 
 
@@ -107,7 +107,7 @@ impl TimewarpWalker {
     pub fn props(storage_actor:Arc<dyn Persistence>) -> BoxActorProd<TimewarpWalker> {
         Props::new_args(TimewarpWalker::actor, storage_actor)
     }
-
+ 
     fn receive_startwalking(&mut self,
                 _ctx: &Context<Protocol>,
                 _msg: StartTimewarpWalking,

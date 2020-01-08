@@ -1,5 +1,6 @@
 use actix_web::http::{header, Method, StatusCode};
-use std::future::Future;
+use crate::timewarping::{Protocol, WebRequestType};
+//use std::future::Future;
 use actix_web::{
     error, guard, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
     Result,
@@ -7,10 +8,11 @@ use actix_web::{
 use crate::indexstorage::{get_time_key, TIMEWARP_ID_PREFIX, TimewarpData};
 use serde::{Serialize, Deserialize};
 use crate::APIActors;
+pub mod webask;
 
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct ReturnData<T> {
+pub struct ReturnData<T> {
     data:T
 }
 //, data: web::Data<APIActors>
@@ -32,10 +34,35 @@ pub async fn timewarpstateFn(req:HttpRequest, data: web::Data<APIActors>) ->  Re
 #[get("/timewarp")]
 pub async fn timewarpsFn(req:HttpRequest, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
     let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
- 
+    
+    //let pong = webask::ask(data.actor_system.clone(), &data.tw_selecting.as_ref().unwrap().clone(), Protocol::Ping).await;
+    //info!("{:?}", pong);
     Ok(HttpResponse::Ok()
     .content_type("application/json")
     .body( serde_json::to_string_pretty(&r).unwrap()))   
+}
+
+
+#[get("/timewarp/picked")]
+pub async fn timewarpPickedFn(req:HttpRequest, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
+    //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
+    
+    let reply = webask::ask(data.actor_system.clone(), &data.tw_selecting.clone(), Protocol::WebRequest(WebRequestType::PickedTimewarp)).await;
+    info!("{:?}", reply);
+    match reply {
+        Protocol::WebReply(__msg) => {
+            Ok(HttpResponse::Ok()
+                .content_type("application/json")
+                .body( __msg)) 
+        },
+        
+        _ => {
+            Ok(HttpResponse::NotFound()
+        .content_type("application/json")
+        .body("{}"))
+        }
+    }
+     
 }
 
 
@@ -60,5 +87,18 @@ pub async fn timewarpIdMaxFn(info: web::Path<(String, i32)>, data: web::Data<API
         data: r
     }).unwrap()))
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
  
