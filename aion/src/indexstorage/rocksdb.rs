@@ -8,7 +8,7 @@ use std::marker::{Send, Sync};
 //use std::convert::TryInto;
 use std::sync::Mutex;
 //use crate::timewarping::Protocol;
-
+use crate::timewarping::timewarpselecting::TimewarpSelectionState;
 use crate::indexstorage::*;
 use crate::SETTINGS;
 use ::rocksdb::{DB, Options, WriteBatch};
@@ -20,12 +20,17 @@ const TW_DETECTION_RANGE_TX_INDEX_COLUMN:&str = "TW_DETECTION_RANGE_TX_INDEX_COL
 const TW_DETECTION_RANGE_GROUP_INDEX_COLUMN:&str = "TW_DETECTION_RANGE_GROUP_INDEX_COLUMN";
 const FOLLOWED_TW_INDEX_COLUMN:&str = "FOLLOWED_TW_INDEX_COLUMN";
 const FOLLOWED_TW_INDEX_RANGE_COLUMN:&str = "FOLLOWED_TW_INDEX_RANGE_COLUMN";
+
+const LIFELINE_INDEX_COLUMN:&str = "LIFELINE_INDEX_COLUMN";
+const LIFELINE_INDEX_RANGE_COLUMN:&str = "LIFELINE_INDEX_RANGE_COLUMN";
+
 const PINNED_TX_COUNTER:&str = "PINNED_TX_COUNTER";
 const PATHWAY_DESCRIPTORS:&str = "PATHWAY_DESCRIPTORS";
 const FLEXIBLE_ZERO:&str = "FLEXIBLE_ZERO";
 const PERSISTENT_CACHE:&str = "PERSISTENT_CACHE";
 //Persistent cache keys:
-
+const P_CACHE_LAST_LIFELIFE:&str = "LAST_LIFELINE";
+const P_CACHE_UNPINNED_LIFELIFE:&str = "UNPINNED_LIFELINE";
 
 
 #[derive(Debug)]
@@ -34,7 +39,7 @@ pub struct RocksDBProvider {
     TW_DETECTION_RANGE_TX_INDEX_COLUMN_cache: Mutex<LruCache<i64, HashMap<String, String>>>,
     FOLLOWED_TW_INDEX_RANGE_COLUMN_cache:  Mutex<LruCache<i64, HashMap<String, String>>>,
     FOLLOWED_TW_INDEX_COLUMN_cache:  Mutex<LruCache<String, TimewarpData>>,
-    LAST_PICKED_TW_cache: Mutex<Option<TimewarpData>>
+    LAST_PICKED_TW_cache: Mutex<Option<TimewarpSelectionState>>
 }
 
 
@@ -45,7 +50,7 @@ impl Persistence for RocksDBProvider {
         let previous = self.tw_detection_get_decision_data(tw.target_hash().to_string());
         let tostore = if previous.is_some() {
             let advanced = previous.unwrap().advance(&tw);
-            info!("Advancing {}: Index: {} Avg distance {}", &advanced.timewarpid, &advanced.index_since_id, &advanced.avg_distance );
+            info!("Advancing ID:{} : Index: {} Avg distance {}", &advanced.timewarpid, &advanced.index_since_id, &advanced.avg_distance );
             advanced
         }else{
             info!("New timewarp: {}", tw.source_hash.clone());
@@ -81,8 +86,7 @@ impl Persistence for RocksDBProvider {
                 Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("Deserialisation to work")),
                 Ok(None) => None,
                 Err(e) => {println!("operational problem encountered: {}", e);
-                None},
-                _ => None
+                None}
             };
 
             if result.is_some() {
@@ -91,10 +95,73 @@ impl Persistence for RocksDBProvider {
             }
             result
         }
-
-
     }
 
+    fn get_lifeline(&self, key: i64) -> Vec<LifeLineData> {
+        let handle = self.provider.cf_handle(LIFELINE_INDEX_RANGE_COLUMN).unwrap();   
+        let to_return:Option<Vec<LifeLineData>> = match self.provider.get_cf(handle,  key.to_be_bytes()) {                
+                Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("get_lifeline_tx")),
+                Ok(None) => None,
+                Err(e) => {println!("operational problem encountered: {}", e);
+                None}
+        };
+        if to_return.is_some() {
+            to_return.unwrap()
+        }else{
+            vec!()
+        }
+    }
+
+    fn get_lifeline_ts(&self, timestamp:i64) -> Option<LifeLineData> {
+        let it = self.get_lifeline(get_time_key(&timestamp));
+        let mut found: Option<LifeLineData> = None;
+        for lifeline in it  {
+            if lifeline.timestamp > timestamp {
+                found = Some(lifeline.clone());
+            }else {
+                break;
+            }
+        }
+        found
+    }
+
+    fn get_unpinned_lifeline(&self) -> Vec<LifeLineData> {
+        let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();        
+        let to_return:Option<Vec<LifeLineData>> = match self.provider.get_cf(handle,  P_CACHE_UNPINNED_LIFELIFE.as_bytes()) {                
+            Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("get_unpinned_lifeline")),
+            Ok(None) => None,
+            Err(e) => {println!("operational problem encountered: {}", e);
+            None}
+        };
+        if to_return.is_some() {
+            to_return.unwrap()
+        }else{
+            vec!()
+        }
+    }
+
+
+    fn get_lifeline_tx(&self, key: String) -> Option<LifeLineData> {
+        let handle = self.provider.cf_handle(LIFELINE_INDEX_COLUMN).unwrap();
+        
+        match self.provider.get_cf(handle,  key.as_bytes()) {                
+                Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("get_lifeline_tx")),
+                Ok(None) => None,
+                Err(e) => {println!("operational problem encountered: {}", e);
+                None}
+        }
+    }
+
+    fn get_last_lifeline(&self) -> Option<LifeLineData> {
+        let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
+        
+        match self.provider.get_cf(handle,  P_CACHE_LAST_LIFELIFE.as_bytes()) {                
+                Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("get_last_lifeline")),
+                Ok(None) => None,
+                Err(e) => {println!("operational problem encountered: {}", e);
+                None}
+        }
+    }
    
     fn save_timewarp_state(&self, state: TimewarpIssuingState) {
         
@@ -108,8 +175,7 @@ impl Persistence for RocksDBProvider {
                 Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("get_timewarp_state")),
                 Ok(None) => None,
                 Err(e) => {println!("operational problem encountered: {}", e);
-                None},
-                _ => None
+                None}
         }
     }
 
@@ -143,8 +209,7 @@ impl Persistence for RocksDBProvider {
                 Ok(Some(value)) => serde_json::from_slice(&*value).unwrap(),
                 Ok(None) => HashMap::new(),
                 Err(e) => {println!("operational problem encountered: {}", e);
-                HashMap::new()},
-                _ => HashMap::new()
+                HashMap::new()}
             };
             if result.len() > 0 {
                 borrowed_cached.insert(key.clone(), result.clone());
@@ -156,7 +221,7 @@ impl Persistence for RocksDBProvider {
     }
     fn tw_detection_get_all(&self, keys:Vec<&i64>) ->HashMap<String, String> {HashMap::new()}
 
-    fn get_last_picked_tw(&self) -> Option<TimewarpData> {
+    fn get_last_picked_tw(&self) -> Option<TimewarpSelectionState> {
         let cached = self.LAST_PICKED_TW_cache.lock().unwrap();
         if cached.is_some() {
             return Some(cached.as_ref().unwrap().clone());
@@ -169,20 +234,18 @@ impl Persistence for RocksDBProvider {
             Ok(Some(value)) => {
                 let local_result = match self.provider.get_cf(handle, &*value) {
                     Ok(Some(value_two)) => {
-                        let res: Option<TimewarpData> = serde_json::from_slice(&*value_two).unwrap();
+                        let res: Option<TimewarpSelectionState> = serde_json::from_slice(&*value_two).unwrap();
                         res
                     }
                     Ok(None) => None,
                     Err(e) => {println!("operational problem encountered: {}", e);
-                    None},
-                    _ => None
+                    None}
                 };
                 local_result
             },
             Ok(None) => None,
             Err(e) => {println!("operational problem encountered: {}", e);
-            None},
-            _ => None
+            None}
         };        
         result
     }
@@ -200,8 +263,7 @@ impl Persistence for RocksDBProvider {
                 Ok(Some(value)) => serde_json::from_slice(&*value).unwrap(),
                 Ok(None) => HashMap::new(),
                 Err(e) => {println!("operational problem encountered: {}", e);
-                HashMap::new()},
-                _ => HashMap::new()
+                HashMap::new()}
             };
             if result.len() > 0 {
                 borrowed_cached.insert(key.clone(), result.clone());
@@ -211,45 +273,60 @@ impl Persistence for RocksDBProvider {
         }
     }
 
-    //TODO Make sure this function works.
-    fn add_last_picked_tw(&self, timewarps: Vec<TimewarpData>) -> Result<(), String> {
-        let handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_COLUMN).unwrap();
-        let range_handle = self.provider.cf_handle(FOLLOWED_TW_INDEX_RANGE_COLUMN).unwrap();
+
+    fn prepend_to_lifeline(&self, ll_data: Vec<LifeLineData>) -> Result<(), String> {
+        Ok(())
+    }
+
+    
+    /// This function assumes the first data-point to be the 'oldest'
+    fn add_to_lifeline(&self, lifeline_data: Vec<LifeLineData>) -> Result<(), String> {
+        let handle = self.provider.cf_handle(LIFELINE_INDEX_COLUMN).unwrap();
+        let range_handle = self.provider.cf_handle(LIFELINE_INDEX_RANGE_COLUMN).unwrap();
+        
         let mut batch = WriteBatch::default();
-        let mut cache_updates:HashMap<i64, HashMap<String, String>> = HashMap::new();
-        for timewarp in timewarps {
-            let last_tw = self.get_last_picked_tw();
-            if last_tw.is_some() {
-                let unwrapped = last_tw.unwrap();
-                if unwrapped.timestamp > timewarp.timestamp {
+        
+        let mut last_lifeline = if lifeline_data.first().unwrap().connecting_timewarp.is_some() {                
+            self.get_lifeline_tx(lifeline_data.first().unwrap().connecting_timewarp.as_ref().unwrap().to_string())
+        }else {
+            None
+        };
+        for lifeline in lifeline_data {            
+            if last_lifeline.is_some() {
+                let unwrapped_last_ll = last_lifeline.unwrap();
+                if &unwrapped_last_ll.timestamp > &lifeline.timestamp {
                     return Err("Given timewarp is older then the one provided".to_string());
                 }
-                if unwrapped.hash == *timewarp.target_hash() {
-                   
-                    let _1 = &batch.put_cf(handle, timewarp.hash.as_bytes(), serde_json::to_vec(&timewarp).unwrap());
-                    let mut range_map = self.get_picked_tw_index(get_time_key(&timewarp.timestamp));
-                    range_map.insert(timewarp.hash.clone(), timewarp.target_hash());
-                    let _2 = &batch.put_cf(range_handle, get_time_key(&timewarp.timestamp).to_be_bytes(),serde_json::to_vec(&range_map).unwrap());
-                    
-                    cache_updates.insert(get_time_key(&timewarp.timestamp), range_map);
+                if &unwrapped_last_ll.timewarp_tx == lifeline.connecting_timewarp.as_ref().expect("Connecting lifeline data") {
+                    for time_key in get_time_key_range(&unwrapped_last_ll.timestamp, &lifeline.timestamp ) {
+                        let _1 = &batch.put_cf(handle, &lifeline.timewarp_tx.as_bytes(), serde_json::to_vec(&lifeline).unwrap());
+                        let mut range_map = self.get_lifeline(time_key);
+                        range_map.push(lifeline.clone());
+                        let _2 = &batch.put_cf(range_handle, time_key.to_be_bytes(),serde_json::to_vec(&range_map).unwrap());                        
+                    }                   
                 } else {
-                    return Err("Not a connecting timewarp. Source and target transaction are not matching.".to_string());
+                    return Err("Not a connecting lifeline. Connecting_timewarp does not match latest transaction ID.".to_string());
                 }
             } else {
-                let _l = &batch.put_cf(handle, timewarp.hash.as_bytes(), serde_json::to_vec(&timewarp).unwrap());
-                let mut range_map = self.get_picked_tw_index(get_time_key(&timewarp.timestamp));
-                range_map.insert(timewarp.hash.clone(), timewarp.target_hash());
-                let _2 = &batch.put_cf(range_handle, get_time_key(&timewarp.timestamp).to_be_bytes(), serde_json::to_vec(&range_map).unwrap());
+                info!("Life line initialisation");
+                let _l = &batch.put_cf(handle, lifeline.timewarp_tx.as_bytes(), serde_json::to_vec(&lifeline).unwrap());                
+                let mut range_map = self.get_lifeline(get_time_key(&lifeline.timestamp));
+                range_map.push(lifeline.clone());
+                let _2 = &batch.put_cf(range_handle, get_time_key(&lifeline.timestamp).to_be_bytes(),serde_json::to_vec(&range_map).unwrap());    
                     
-                cache_updates.insert(get_time_key(&timewarp.timestamp), range_map);
+                //cache_updates.insert(get_time_key(&timewarp.timestamp), range_map);
             }
+            last_lifeline = Some(lifeline.clone());
+            
         }
         let _l = self.provider.write(batch);
+       
         if _l.is_ok() {
-           let mut borrowed_cache = self.FOLLOWED_TW_INDEX_RANGE_COLUMN_cache.lock().unwrap();
-           for cupdate in cache_updates {
-               borrowed_cache.insert(cupdate.0, cupdate.1);
-           }
+            if last_lifeline.is_some() {
+                let last_lifeline_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
+                self.provider.put_cf(last_lifeline_handle, P_CACHE_LAST_LIFELIFE.as_bytes(), serde_json::to_vec(&last_lifeline.unwrap()).unwrap());
+            }
+           
         }else{
             return Err("Something went wrong writing batches".to_string());
         }
@@ -271,6 +348,8 @@ impl RocksDBProvider {
             TW_DETECTION_RANGE_GROUP_INDEX_COLUMN,
             FOLLOWED_TW_INDEX_COLUMN,
             FOLLOWED_TW_INDEX_RANGE_COLUMN,
+            LIFELINE_INDEX_COLUMN,
+            LIFELINE_INDEX_RANGE_COLUMN,
             PINNED_TX_COUNTER,
             PATHWAY_DESCRIPTORS,
             FLEXIBLE_ZERO,

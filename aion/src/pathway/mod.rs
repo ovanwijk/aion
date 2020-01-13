@@ -1,39 +1,39 @@
-const _E:u8 = 0b00000000u8;
-const _T:u8 = 0b10000000u8;
-const _B:u8 = 0b01000000u8;
-const _Y:u8 = 0b11000000u8;
+use serde::{Serialize, Deserialize};
+
+pub const _E:u8 = 0b00000000u8;
+pub const _T:u8 = 0b10000000u8;
+pub const _B:u8 = 0b01000000u8;
+pub const _Y:u8 = 0b11000000u8;
 
 const STEPS_PER_FIELD:usize = 4; // 
 
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PathwayDescriptor {
-    pub start:String,
     pub size:usize,
-    pub fields:Vec<u8>
+    pub fields:Box<Vec<u8>>
 }
 
 
 impl PathwayDescriptor {
-    fn new(start:String) -> PathwayDescriptor {
+    pub fn new() -> PathwayDescriptor {
         PathwayDescriptor {
-            start: start,
             size: 0,
-            fields: vec!()
+            fields: Box::new(vec!())
         }
     }
 
     pub fn add_to_path(&mut self, what:u8) -> usize {
        
         if self.size % STEPS_PER_FIELD == 0 {
-            println!("adding!");
+            //println!("adding!");
             self.fields.push(0b00000000u8);
         }
         let edited = self.fields.last().expect("Last field should always be there");        
         let shifted = what >> (2 * (self.size % STEPS_PER_FIELD));
         let added = edited | shifted;
-        println!("i: {} w:{:b} sh:{:b} ed:{:b} added:{:b}", 2 * (self.size % STEPS_PER_FIELD) ,what, shifted, edited, added);
+        //println!("i: {} w:{:b} sh:{:b} ed:{:b} added:{:b}", 2 * (self.size % STEPS_PER_FIELD) ,what, shifted, edited, added);
         std::mem::replace(self.fields.last_mut().expect("Last field to be present"), added);
         self.size += 1;
         self.size
@@ -47,12 +47,20 @@ impl PathwayDescriptor {
         }
     }
 
-    pub fn from_vec(v:Vec<u8>, start:String) -> PathwayDescriptor {
+    pub fn from_vec(v:Vec<u8>) -> PathwayDescriptor {
         PathwayDescriptor {
-            start: start,
             size: v.len() * STEPS_PER_FIELD,
-            fields: v
+            fields: Box::new(v)
         }
+    }
+
+    pub fn format(&self) -> String {
+        let mut result = String::from("");
+        for f in self.fields.clone().into_iter() {
+            result = format!("{}|{:b}", result, f);
+        }
+
+        result
     }
 }
 
@@ -80,10 +88,11 @@ impl Iterator for PathwayIterator {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::iota_api::PathfindingResult;
     #[test]
     fn adding() {
 
-        let mut a = PathwayDescriptor::new("TEST".to_string());
+        let mut a = PathwayDescriptor::new();
         a.add_to_path(_Y);
         a.add_to_path(_Y);
         a.add_to_path(_E);
@@ -99,4 +108,15 @@ mod test {
         assert_eq!(a.get_at_index(2).unwrap(), _E);
         assert_eq!(a.get_at_index(6).unwrap(), _B);
     }
+
+    #[test]
+    fn from_result() {
+        let txt = "{\"txIDs\":[\"QCJTVNA9UDKRSYHLMYQ9ZWQATRKMRXGJIHZ9MKBSWQXDBCUQDTTGVOMZIQCWMJDHWJYOBOCIZQBMGPEE9\",\"OCCEA9S9CIVV9PJRVHKRWUDQCXTUKJCOPSFHKNAENHXBRSZMJXYZJGBULNZTLSRQHECORTU9GUYRBIWP9\",\"URKDZNAMZXLRSYDZQO9OAKM9JOFRPDBMLTYCJEFPFQKTUHBVGTXGMDXGELIXWXZLCKDVAFWOOCYFZGAT9\",\"SIVSQVIW9LBALMAYBQR9XVJAIYNCCTITFHUIAURZUPMBLTRQHJXBUSTJC9FCNTLBLOXRNNVEENPXKOOP9\",\"BWPKUBJJQICGHWOHVNV9HIDVUBKVBBEJIVQ9NDKDTV9A9LQBGMWQLXSRHFYOHBCEPFLYQQJQMYAFZXOR9\",\"IQJQRPPYYNBQUGSCJZPRCQMHBIBSDAYMXDWRB9KKUKHSXVCPRCCLP9B9PKYDXJEKDTOSKJSXUUPIAVTF9\",\"BKUXYSOHJRRDZBPFTYEFYSJJIIBHCPMLJQKVTRZROIJZGKPLD9NIMRUDQQMKRYJXRGLIRXGMJCGZAORP9\",\"GTSBSJTYHQBBARNKWBVNMPBOQXLMELWXAMACOQIJ9ZUKEHGRUGBWOMNEOYPERWMUYCKADYZLPQRYVRMS9\",\"GVGDNQEJWFJCBYIEKXKEVCDZKINNWFZDQOCSH9PDMPTGPSE9VHSVBFNCUZQSMDPXFQNJXTJXSKZJEEGJ9\",\"JAYMCLVBBVXZKPJXJBX9VWPDMYCPYKFRJZASYQDVNCIXU9BODQAHGJLAEQAWVLPAECISZOCTGFUKNV9N9\",\"UWWGIVWUEKRCEUQLCUXHPJMHTCDHKMMFDHMXGXNXBTEOIMAGVXAEETYEEJDNHYNVUU9QJ9MIRFQG9KWZ9\",\"GLBUXXC9CGGWBEBETWLERWKQLFSUBPUJTRADGUDYQQAUGZRFVWN9KNOUXSPVKDZHGTXFLPVMFGTBKGYY9\",\"QLSIGGAKZMXELNGRF9AVCGZNATWKKUKWCK9HWIKX9LMHCIHFSQBOTTBIDZSPQSXRWSLLAHDCDA9X9KDV9\",\"SYZBKYKAKYAMJJWXMZVVMRRCQKTGXUQVYQI9SIOTYMLGEKSIXOOLKEDLXMERFVQISGSIVVMFIIAV9FSB9\",\"FATI9CZLVWMDJYQEFGUGUUTPDIQVEJQJTNYFHQACJYPSKBLGITXZPIMZEQKXRK9UUAUICTPUNFS9HPMR9\",\"ASWWSGYTPJTKUMKRGEXHXFBIEWCJTVCHFPQTGGMAHAWOEETOJIXMFCYXULXYLCBLGGQEK9HXOBPORFZG9\",\"PC9FEOMVLCEDUCMYRXOOSONDZXNWRBCCZDRFOMBOQNJSWODNCXFYFDFDQDZOECJFMSBAFHFZBBDI9GBS9\",\"G9JHGMPOLZCDHT9GBDSDRVNFCVTVDGMF9NPQIOW9WCKB9SKUXGMZDWOAUYQSEQRBZKMKCPOPNMJMRCZV9\",\"ORJYXQRXQXJJUFZ9CCLIVGPQKOKFADMCOPIAXLGYFOFTUKPKPYTKXCDEBFWBKPDTRQSLFXROFIGHFPTZ9\",\"SITLMLYQCNUGFWTSVIXK9ZHGZVDVOJTKVCVRKWWCEOHWLLCUMITTLCGJZIAIGBKKACTMAIEGNEBTARWW9\",\"DTFTXZYSMVLJDHSQJYVWOXIIDPPKYCQYSG9EPW9FVKBPXTUUXLET9PJT9XR9ZQYHEKSWHJ9EETHQVUNA9\",\"NJECHWXLKGYAURPDHMYSGWTDLBUKN9ELNGLGPRTPDX9QGBCXYYKFXSKQTXUDWKKCAFCKOUALAVLVTLMM9\",\"ZXV9XDTIGBVEAIJGKUIOMMFWFWKZDGERMTOAFMBJAPVQMCWMF9NUKGUSZUTGXMDUJPPWLVBZKXJNTHJX9\"],\"branches\":[[3,2],[5,4],[6,5],[7,6],[9,8],[10,9],[14,13],[15,14],[16,15],[17,16],[19,18],[22,21]],\"trunks\":[[1,0],[2,1],[4,3],[8,7],[11,10],[12,11],[13,12],[18,17],[20,19],[21,20]],\"duration\":5}";
+        let a:PathfindingResult = serde_json::from_str(txt).expect("Json parsing to work");
+        println!("{:?}", a);
+        let pathway_desc = a.to_pathway();
+        println!("Test: {}", pathway_desc.format());
+    }
+
+   
 }

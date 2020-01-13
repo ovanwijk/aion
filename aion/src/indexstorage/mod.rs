@@ -4,15 +4,18 @@ use serde::{Serialize, Deserialize};
 use crate::timewarping::signing::*;
 pub mod rocksdb;
 use std::sync::Arc;
-
+use crate::pathway::PathwayDescriptor;
 use std::marker::{Send, Sync};
 use std::{
-    collections::{HashMap, HashSet}};
+    collections::{HashMap}};
 
+
+/// Function that takes a seconds-based timestamp and returns an interger time-key index
+/// This index is based on SETTINGS.timewarp_index_settings.time_index_clustering_in_seconds
 pub fn get_time_key(timestamp:&i64) -> i64 {    
     timestamp - (timestamp % SETTINGS.timewarp_index_settings.time_index_clustering_in_seconds as i64)    
 }
-use iota_lib_rs::iota_conversion;
+use crate::timewarping::timewarpselecting::TimewarpSelectionState;
 
 
 pub const TIMEWARP_ID_PREFIX:&str = "TW_ID";
@@ -20,7 +23,7 @@ pub const TIMEWARP_ID_PREFIX:&str = "TW_ID";
 pub const LAST_PICKED_TW_ID:&str = "LAST_PICKED_TW_ID";
 pub const TW_ISSUING_STATE:&str = "TW_ISSUING_STATE";
 
-
+/// Given a start and end timestamp returns a range of time-indexes.
 pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
     let mut to_return:Vec<i64> = vec![];
     let mut next = get_time_key(start);
@@ -49,6 +52,7 @@ pub fn get_n_timewarp_transactions(timewarp_id:String, n:i32, st: Arc<dyn Persis
 }
 
 
+/// Uses the persistence layer to obtain a list of latest kown timewarps.
 pub fn get_lastest_known_timewarps(st: Arc<dyn Persistence>) -> Vec<TimewarpData> {
     let timewindow_key = get_time_key(&crate::now());
     let mut a  = st.tw_detection_get(&timewindow_key);
@@ -70,18 +74,57 @@ pub fn get_lastest_known_timewarps(st: Arc<dyn Persistence>) -> Vec<TimewarpData
     to_return
 }
 
-
+/// Persistence trait described all local persistence functions required for AION.
+/// There are multiple domains described here:
+/// 
+/// tw_detection: Relates to all information that is being stored in order to detect
+/// possible timewarps.
+/// 
+/// last picked timewarps: this domain describes timewarps are that are 'followed' and detected
+/// this is the basis to select a lifeline on.
+/// 
+/// Lifeline: a collection of selected timewarps and connecting transaction ID's that are being pinned
+/// on the managed IOTA node.
+/// 
+/// Timewarp-state: All data related to issuing your own timewarps.
 pub trait Persistence: Send + Sync + std::fmt::Debug {    
+    /// Adds values to a time-index key-block.
     fn tw_detection_add_to_index(&self, key:i64, values:Vec<(String, String)>);
+    /// Removes values from a time-index key-block
     fn tw_detection_remove_from_index(&self, key:i64, values:HashMap<String, String>);
+    /// Gets a time-index key-block
     fn tw_detection_get(&self, key:&i64) -> HashMap<String, String>;
+    /// Gets all key-blocks given a list of time-keys.
     fn tw_detection_get_all(&self, keys:Vec<&i64>) -> HashMap<String, String>;
+    /// Adds data to the observed timewarp set. This must be done in correct order to populate
+    /// the TimewarpData statistics.
     fn tw_detection_add_decision_data(&self, tw:  crate::timewarping::Timewarp) -> TimewarpData;
+    /// Given a timewarp transaction ID return its related TimewarpData.
     fn tw_detection_get_decision_data(&self, key: String) -> Option<TimewarpData>;
 
+    /// Gets followed timewarp indexes related to a time key. The map equals TimewarpID -> TransactionID
+    /// This means only the latest timewarp transaction in relation to the TimewarpID is returned. You
+    /// have to follow it manually to obtain the other timewarp transactions within the given time-index block.
     fn get_picked_tw_index(&self, key:i64) -> HashMap<String, String>;
-    fn get_last_picked_tw(&self) -> Option<TimewarpData>;
-    fn add_last_picked_tw(&self, timewarps:Vec<TimewarpData>) -> Result<(), String>; 
+    /// Returnes the latest kown followed timewarp.
+    fn get_last_picked_tw(&self) -> Option<TimewarpSelectionState>;
+
+    /// When adding transactions to the lifeline there might be a path of hundreds of transactions that require pinning
+    /// Therefore lifeline pinning is asynchronous. This function gets lifeline data that still requires pinning.
+    fn get_unpinned_lifeline(&self) -> Vec<LifeLineData>;
+    /// Appends to the lifeline, this should always be a live process
+    fn add_to_lifeline(&self, ll_data:Vec<LifeLineData>) -> Result<(), String>;
+    /// Prepends to the known lifeline. The transaction ID of the split + connecting transactions will be added to the
+    /// lifeline dataset with a postfix of '_N' where N should mostly be 1 and in rare occations more then 1.
+    fn prepend_to_lifeline(&self, ll_data:Vec<LifeLineData>) -> Result<(), String>;
+    /// Get lifeline data given en time-index key
+    fn get_lifeline(&self, key:i64) -> Vec<LifeLineData>;
+    /// Gets the closest lifeline transactions to the given timestamp.
+    fn get_lifeline_ts(&self, timestamp:i64) -> Option<LifeLineData>;
+    /// Gets a specific lifeline data point given the transaction ID. Note that this might sometimes be post-fixed with '_N'
+    fn get_lifeline_tx(&self, key:String) -> Option<LifeLineData>;
+    /// Gets the head of the lifeline.
+    fn get_last_lifeline(&self) -> Option<LifeLineData>;
 
     fn save_timewarp_state(&self, state: TimewarpIssuingState);
     fn get_timewarp_state(&self) -> Option<TimewarpIssuingState>;
@@ -129,15 +172,33 @@ pub struct TimewarpData {
     pub avg_distance: i64,
     pub index_since_id: i64,
 }
-
-// #[derive(Clone, Debug)]
-// pub struct WarpWalk {
-//     pub from: String,
-//     pub timestamp: i64,
-//     pub distance: i64,
-//     pub trunk_or_branch:bool,
-//     pub target: String
-// }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LifeLineData {
+    pub timewarp_tx: String,    
+    pub trunk_or_branch: bool,
+    pub timestamp: i64,
+    pub oldest_timestamp: i64,
+    pub connecting_txs: Vec<String>, //Used to be (String, bool) bool=trunk_or_branch but for validation of the path there should be no difference
+    pub connecting_timestamp: Option<i64>,
+    pub connecting_timewarp: Option<String>
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PinDescriptor {
+    pub id: String,
+    pub timestamp: i64,
+    pub is_pinned: bool,
+    pub original_start_tx: String,
+    pub original_pathway: PathwayDescriptor,
+    pub lifeline_transaction: String,
+    pub lifeline_adjusted_pathway: PathwayDescriptor,
+    pub metadata: String
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AwaitPinning {
+    pub id: String,
+    pub transaction_id: String,
+    pub transaction_trytes: Option<String>
+}
 
 
 impl TimewarpData {

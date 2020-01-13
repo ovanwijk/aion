@@ -14,6 +14,7 @@ use iota_lib_rs::iota_model::Transaction;
 use crate::aionmodel::tangle::*;
 use crate::indexstorage::Persistence;
 use crate::timewarping::zmqlistener::*;
+use crate::timewarping::timewarpselecting::TimewarpSelectionState;
 use crate::timewarping::Protocol;
 use crate::timewarping::Timewarp;
 use crate::timewarping::signing;
@@ -33,12 +34,13 @@ pub struct TimewarpIndexing {
     avg_count: i64,
     avg_distance: f64,
     storage: Arc<dyn Persistence>,
+    timewarp_selecting: ActorRef<Protocol> ,
     //Map containing TXID as key and TimewarpID as Value
     //Timewarp ID is used when using the timewarp walker and cache intermediate progress on the timewarp.
     known_timewarp_tips: HashMap<String, String>,
-    
+    start_time: i64,
     known_active_walks: HashMap<String, Vec<Timewarp>>,    
-    last_picked_tw: Option<TimewarpData>    
+    last_picked_tw: Option<TimewarpSelectionState>    
 }
 
 impl Actor for TimewarpIndexing { 
@@ -54,7 +56,10 @@ impl Actor for TimewarpIndexing {
             Protocol::RegisterZMQListener(__msg) => self.receive_registerzmqlistener(ctx, __msg, sender),
             Protocol::NewTransaction(__msg) => self.receive_newtransaction(ctx, __msg, sender),
             Protocol::TransactionConfirmed(__msg) => self.receive_transactionconfimation(ctx, __msg, sender),
-            Protocol::TimewarpWalkingResult(id, __msg) => self.receive_timewalkresult(ctx, id, __msg, sender), //TODO remove from walking history
+            Protocol::TimewarpWalkingResult(id, __msg) => self.receive_timewalkresult(ctx, id, __msg, sender),
+            Protocol::Timer => {
+                self.receive_timer(ctx, sender);
+            },
             _ => ()
         }
     }
@@ -161,6 +166,16 @@ impl TimewarpIndexing {
         }
         None
     }
+
+    fn ready_check(&mut self) -> bool {
+        //We wait at least the time for switching to look at the tangle before starting to make any judgements.
+        if crate::now() - self.start_time > SETTINGS.timewarp_index_settings.detection_threshold_switch_timewarp_in_seconds {
+            if self.known_active_walks.is_empty() {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 
@@ -169,18 +184,38 @@ impl TimewarpIndexing {
  * Actor receive messages
  */
 impl TimewarpIndexing {
-    fn actor(storage:Arc<dyn Persistence>) -> Self {
-        let last_picked =  &storage.get_last_picked_tw();
+    fn actor(args:(Arc<dyn Persistence>, ActorRef<Protocol>)) -> Self {
+        let last_picked =  &args.0.get_last_picked_tw();
         TimewarpIndexing {
             tangle: Tangle::default(),
             avg_count: 1,
             avg_distance: 1000.0 ,//default 1 second
-            storage: storage,
+            storage: args.0,
+            start_time: crate::now(),
             known_timewarp_tips: HashMap::new(),
             known_active_walks: HashMap::new(),
-            last_picked_tw: last_picked.to_owned()
+            last_picked_tw: last_picked.to_owned(),
+            timewarp_selecting: args.1
         }
     }
+    pub fn receive_timer(&mut self,
+        ctx: &Context<Protocol>,
+        _sender: Sender) {
+        
+        if self.ready_check() {
+            info!("Timewarp indexing ready for analysis");
+            self.timewarp_selecting.tell(Protocol::Ready, None);
+        }else {
+        
+            ctx.schedule_once(
+                std::time::Duration::from_secs(5),
+                 ctx.myself(), 
+                 None, 
+                 Protocol::Timer);
+        }
+       
+    }
+
     fn receive_newtransaction(&mut self,
                 _ctx: &Context<Protocol>,
                 _msg: NewTransaction,
@@ -199,7 +234,7 @@ impl TimewarpIndexing {
         _sender: Sender) {
         info!("Got timewalk result");
         //We need to reverse the insertion order for the found timewarp. The walker walks from present to past but we want to insert from
-        //Past to present to keep statistics.
+        //past to present to keep statistics.
         for v in timewarps.iter().rev() {
             let tw_data = self.storage.tw_detection_add_decision_data(v.clone());
             let _res = self.storage.tw_detection_add_to_index(get_time_key(&v.source_timestamp), 
@@ -243,7 +278,7 @@ impl TimewarpIndexing {
                 let tw = timewarp.unwrap();
                 if self.last_picked_tw.is_some() {
                     let unwrapped = self.last_picked_tw.as_ref().unwrap();
-                    if &unwrapped.hash == tw.target_hash() {
+                    if &unwrapped.last_picked_timewarp.hash == tw.target_hash() {
                         info!("Found connecting timewarp");
                     }
                 }
@@ -294,7 +329,7 @@ impl TimewarpIndexing {
                         trunk_or_branch: tw.trunk_or_branch,
                         last_picked_tw_tx: {
                            if self.last_picked_tw.is_some() {
-                                let r = &self.last_picked_tw.as_ref().unwrap().hash;
+                                let r = &self.last_picked_tw.as_ref().unwrap().last_picked_timewarp.hash;
                                 r.to_owned()
                            }else{
                                 String::from("")
@@ -323,8 +358,8 @@ impl TimewarpIndexing {
         println!("Registering {:?}", res);
     }
 
-    pub fn props(storage:Arc<dyn Persistence>) -> BoxActorProd<TimewarpIndexing> {
-        Props::new_args(TimewarpIndexing::actor, storage)
+    pub fn props(args:(Arc<dyn Persistence>, ActorRef<Protocol>)) -> BoxActorProd<TimewarpIndexing> {
+        Props::new_args(TimewarpIndexing::actor, args)
     }
 }
 

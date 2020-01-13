@@ -24,19 +24,17 @@ mod indexstorage;
 mod pathway;
 mod webapi;
 mod iota_api;
-use futures::executor::block_on;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 use lazy_static::*;
 use iota_lib_rs::*;
 use actix_web::{
-    error, guard, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer,
-    Result,
+     App, HttpServer,
 };
 use riker::actors::*;
 use hocon::HoconLoader;
 use std::*;
 use std::sync::Arc;
-use json::JsonValue;
 use indexstorage::rocksdb::RocksDBProvider;
 use indexstorage::{Persistence};
 use timewarping::zmqlistener::*;
@@ -46,7 +44,7 @@ use timewarping::timewarpissuing::*;
 use timewarping::timewarpselecting::*;
 
 use timewarping::Protocol;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::{Deserialize};
 
 // use actix_web::{
 //     error, guard, middleware, web, App, Error, HttpRequest, HttpResponse, HttpServer, Responder,
@@ -207,6 +205,7 @@ async fn main() -> io::Result<()> {
     
     let do_timewarp = &args.contains(&String::from("--timewarp"));
     let only_timewarp = &args.contains(&String::from("--only-timewarp"));
+    let no_api = &args.contains(&String::from("--no-api"));
     if *do_timewarp {info!("Timewarping");}
     if *only_timewarp {info!("only_timewarp");}
     let ldr = HoconLoader::new();
@@ -236,13 +235,14 @@ async fn main() -> io::Result<()> {
     //      vec!("AQEXQMGPTUARFAYMMHNJMNKQGQCRSTZGSUOMGG9CIOOMTHP99KMYVUHJTEGZKXLCVBBFLEMTUIMCAQFG9".to_string())).await;
     let zmq_actor = sys.actor_of(ZMQListener::props(), ZMQ_LISTENER_ACTOR).unwrap();
     let tw_selection_actor = sys.actor_of(TimewarpSelecting::props(storage.clone()), TIMEWARP_SELECTION_ACTOR).unwrap();
-    tw_selection_actor.clone().tell(Protocol::Timer, None);
+    //tw_selection_actor.clone().tell(Protocol::Timer, None);
    //  let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
     if !only_timewarp {
 
-        let indexing_actor = sys.actor_of(TimewarpIndexing::props(storage.clone()), TIMEWARP_INDEXING_ACTOR).unwrap();
+        let indexing_actor = sys.actor_of(TimewarpIndexing::props((storage.clone(), tw_selection_actor.clone())), TIMEWARP_INDEXING_ACTOR).unwrap();
         indexing_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
+        indexing_actor.tell(Protocol::Timer, None);
         //let temp_actor = sys.actor_of(TimewarpWalker::props(storage.clone()), "timewarp-walking").unwrap();
     }
     //storage_actor.tell(Protocol::AddToIndexPersistence(TimewarpIndexEntry{key: 10, values: vec!["Hallo".to_string(), "world".to_string()]}), None);
@@ -286,6 +286,10 @@ async fn main() -> io::Result<()> {
     //     .bind("127.0.0.1:0")?
     //     .run()
     //     .await
+    if *no_api {
+        println!("Going to wait...");
+        io::stdin().read_line(&mut String::new()).unwrap();
+    }
     let arc_system = Arc::new(sys);
     HttpServer::new(
         move || App::new().data(APIActors {

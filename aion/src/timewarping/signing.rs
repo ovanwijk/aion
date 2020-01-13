@@ -39,7 +39,7 @@ pub fn generate_key_and_address(seed:&str, index:usize) -> (Vec<i8>, String) {
        
     let digests_a = digests(&key_a).unwrap();
     let address_a_trits = address(&digests_a).unwrap();
-    let mut address_a = address_a_trits.trytes().unwrap();
+    let address_a = address_a_trits.trytes().unwrap();
 
     (key_a, address_a)
 }

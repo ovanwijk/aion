@@ -15,6 +15,7 @@ pub enum Protocol {
     Ping,
     Pong,
     Timer,
+    Ready,
     StartTimewarpWalking(timewarpwalker::StartTimewarpWalking),
     TimewarpWalkingResult(String, Vec<Timewarp>),
     PullTxData(zmqlistener::PullTxData),

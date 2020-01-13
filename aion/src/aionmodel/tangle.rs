@@ -2,8 +2,8 @@
 use iota_lib_rs::iota_model::Transaction;
 use crate::SETTINGS;
 use std::{
-    collections::{HashMap, HashSet, VecDeque, hash_map::DefaultHasher},
-    hash::{Hash, Hasher, BuildHasherDefault, BuildHasher},
+    collections::{HashMap, HashSet, VecDeque},
+   // hash::{Hash, Hasher, BuildHasherDefault, BuildHasher},
 };
 
 

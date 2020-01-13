@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, VecDeque, hash_map::DefaultHasher},
-    hash::{Hash, Hasher, BuildHasherDefault, BuildHasher},
-};
+
 use iota_lib_rs::iota_conversion;
 use iota_lib_rs::iota_conversion::*;
 
@@ -14,17 +11,17 @@ pub struct Transaction {
     pub tag: String,
     pub signature_fragments: String,
 }
-pub fn parse_zmqtransaction_ (tx_string:&str) -> Transaction {
-    let split: Vec<&str> = tx_string.split(" ").collect();
-    Transaction {
-        id: split[1].to_string(),
-        timestamp: split[5].parse::<i64>().unwrap(),
-        branch_transaction: split[10].to_string(),
-        trunk_transaction: split[9].to_string(),
-        tag: "".to_string(),
-        signature_fragments: "".to_string()
-    }
-}
+// pub fn parse_zmqtransaction_ (tx_string:&str) -> Transaction {
+//     let split: Vec<&str> = tx_string.split(" ").collect();
+//     Transaction {
+//         id: split[1].to_string(),
+//         timestamp: split[5].parse::<i64>().unwrap(),
+//         branch_transaction: split[10].to_string(),
+//         trunk_transaction: split[9].to_string(),
+//         tag: "".to_string(),
+//         signature_fragments: "".to_string()
+//     }
+// }
 
 pub trait TimewarpTX {
     fn timewarp_id(&self) -> &str;
