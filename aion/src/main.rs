@@ -39,9 +39,10 @@ use indexstorage::rocksdb::RocksDBProvider;
 use indexstorage::{Persistence};
 use timewarping::zmqlistener::*;
 use timewarping::timewarpindexing::*;
-use timewarping::timewarpwalker::*;
+
 use timewarping::timewarpissuing::*;
 use timewarping::timewarpselecting::*;
+use timewarping::transactionpinning::*;
 
 use timewarping::Protocol;
 use serde_derive::{Deserialize};
@@ -60,6 +61,7 @@ pub const ZMQ_LISTENER_ACTOR:&str = "zmq-actor";
 pub const TIMEWARP_INDEXING_ACTOR:&str = "timewarp-actor";
 pub const TIMEWARP_ISSUER_ACTOR:&str = "timewarp-issuer-actor";
 pub const TIMEWARP_SELECTION_ACTOR:&str = "timewarp-selection-actor";
+pub const PINNING_ACTOR:&str = "pinning-actor";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct AppSettings {
@@ -235,7 +237,10 @@ async fn main() -> io::Result<()> {
     //      vec!("AQEXQMGPTUARFAYMMHNJMNKQGQCRSTZGSUOMGG9CIOOMTHP99KMYVUHJTEGZKXLCVBBFLEMTUIMCAQFG9".to_string())).await;
     let zmq_actor = sys.actor_of(ZMQListener::props(), ZMQ_LISTENER_ACTOR).unwrap();
     let tw_selection_actor = sys.actor_of(TimewarpSelecting::props(storage.clone()), TIMEWARP_SELECTION_ACTOR).unwrap();
-    //tw_selection_actor.clone().tell(Protocol::Timer, None);
+
+    
+    let transactionpinning_actor = sys.actor_of(TransactionPinning::props(storage.clone()), PINNING_ACTOR).unwrap();
+    transactionpinning_actor.clone().tell(Protocol::Timer, None);
    //  let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
     if !only_timewarp {
@@ -297,6 +302,8 @@ async fn main() -> io::Result<()> {
             actor_system: arc_system.clone(),
             tw_selecting: tw_selection_actor.clone()
         })
+        .service(webapi::lifelineUnpinnedF)
+        .service(webapi::lifelineIdFn)
         .service(webapi::timewarpPickedFn)
         .service(webapi::timewarpstateFn)
         .service(webapi::timewarpsFn)

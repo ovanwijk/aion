@@ -4,6 +4,7 @@ pub mod timewarpwalker;
 pub mod signing;
 pub mod timewarpissuing;
 pub mod timewarpselecting;
+pub mod transactionpinning;
 use serde::{Serialize};
 
 
@@ -31,7 +32,8 @@ pub enum Protocol {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum WebRequestType {
-    PickedTimewarp
+    PickedTimewarp,
+    UnpinnedLifelife
 }
 
 

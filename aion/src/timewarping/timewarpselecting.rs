@@ -81,7 +81,7 @@ impl TimewarpSelecting {
     fn pick_timewarp(&mut self, ctx:&Context<Protocol>){
         let timewarps:std::vec::Vec<TimewarpData> = crate::indexstorage::get_lastest_known_timewarps(self.storage.clone())
             .into_iter().filter(|t| t.timestamp > crate::now() - self.min_distance_in_seconds).collect();
-        if self.picked_timewarp.is_none() && timewarps.len() == 0 {
+        if timewarps.len() == 0 {
             return;
         }
         let best_tw = self.best_timewarp(&timewarps);
@@ -91,22 +91,41 @@ impl TimewarpSelecting {
                 untransitioned_timewarp_heads: vec!()
             });
             info!("First pick: {}", best_tw.timewarpid);
+            
+            self.store_newly_pick(best_tw.clone());
+            self.storage.set_last_picked_tw(self.picked_timewarp.as_ref().unwrap().clone());
         }
         if self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.timewarpid != best_tw.timewarpid {
-            info!("Switched! From: {} to {}", self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash, best_tw.hash);
-            self.picked_timewarp = Some(TimewarpSelectionState {
-                last_picked_timewarp: best_tw.clone(),
-                untransitioned_timewarp_heads: vec!(self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.clone())
-            });
-            let fut = crate::iota_api::find_paths(SETTINGS.node_settings.iri_connection(), best_tw.hash, 
-            vec!(self.picked_timewarp.as_ref().unwrap().untransitioned_timewarp_heads.first().unwrap().hash.to_string()));
+           
+            let fut = crate::iota_api::find_paths(SETTINGS.node_settings.iri_connection(), best_tw.hash.clone(), 
+            vec!(self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash.to_string()));
             
             //let foundPath = futures::executor::block_on(ctx.run(fut).unwrap());
             if !fut.is_err() {
-                info!("Path found: {}", serde_json::to_string_pretty(&fut.unwrap()).unwrap());
+                info!("Switched! From: {} to {}", self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash, best_tw.hash);
+                self.picked_timewarp = Some(TimewarpSelectionState {
+                    last_picked_timewarp: best_tw.clone(),
+                    untransitioned_timewarp_heads: vec!(self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.clone())
+                });
+                //info!("Path found: {}", serde_json::to_string_pretty(&fut.unwrap()).unwrap());
+                self.store_newly_pick(best_tw.clone());
+                self.storage.set_last_picked_tw(self.picked_timewarp.as_ref().unwrap().clone());
+            }else{
+                warn!("Switch required but not yet a path.");
             }
             //TODO add to last picked
             //let _a = self.storage.add_last_picked_tw(vec!(best_tw));
+        }else{
+            if self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash != best_tw.hash {
+                info!("No switch add");
+                self.store_newly_pick(best_tw.clone());
+                self.picked_timewarp = Some(TimewarpSelectionState {
+                    last_picked_timewarp: best_tw.clone(),
+                    untransitioned_timewarp_heads: vec!()
+                });
+                self.storage.set_last_picked_tw(self.picked_timewarp.as_ref().unwrap().clone());
+            }
+            
         }
 
     }
@@ -135,35 +154,48 @@ impl TimewarpSelecting {
             // and we need to pull
             let mut lifelines:Vec<LifeLineData> = vec!();
             for connecting_timewarp in timewarps.iter().rev() {
-                
+                let mut skip = false;
                 let connecting_txs = if connecting_timewarp.target_hash() != ll_unwrapped.timewarp_tx.as_ref() {
                     let path_found = crate::iota_api::find_paths(SETTINGS.node_settings.iri_connection(), 
                         connecting_timewarp.hash.to_string(), vec!(ll_unwrapped.timewarp_tx.clone()));
                         if path_found.is_err() {
                             //IGNORE this timewarp end, we cannot find a path to the location
-                            vec!()
+                            warn!("Found error {:?}", path_found.unwrap_err());
+                            info!("Breaking and retrying");
+                            skip = true;
+                            (vec!(), None)
+
                         }else {
                             info!("Connecting path found");
                             //TODO turn to actual Vec
-                            let mut a = *path_found.unwrap().txIDs.clone();
-                            a.reverse();
-                            a
+                            let u_path = path_found.unwrap();
+                            (*u_path.txIDs.clone(), Some(u_path.to_pathway()))
                            
                         }
                 }else {
-                    vec!()
+                    (vec!(), None)
                 };
+                if !skip { 
+                    lifelines.push(LifeLineData {
+                        timewarp_tx: connecting_timewarp.hash.clone(),    
+                        trunk_or_branch: connecting_timewarp.trunk_or_branch.clone(),
+                        timestamp: connecting_timewarp.timestamp,
+                        oldest_timestamp: ll_unwrapped.oldest_timestamp.clone(),
+                        unpinned_connecting_txs: connecting_txs.0.clone(),
+                        connecting_pathway: connecting_txs.1.clone(),
+                        connecting_timestamp: Some(ll_unwrapped.timestamp),
+                        connecting_timewarp: Some(ll_unwrapped.timewarp_tx.clone())
+                    });
+                    ll_unwrapped = lifelines.last().unwrap(); //TODO Fix immutable borrow
+                }
 
-                lifelines.push(LifeLineData {
-                    timewarp_tx: connecting_timewarp.hash.clone(),    
-                    trunk_or_branch: connecting_timewarp.trunk_or_branch.clone(),
-                    timestamp: connecting_timewarp.timestamp,
-                    oldest_timestamp: ll_unwrapped.timestamp,
-                    connecting_txs: connecting_txs,
-                    connecting_timestamp: None,
-                    connecting_timewarp: None
-                });
             }
+            //lifelines.reverse();
+            if lifelines.len() > 0 {
+                let _r = self.storage.add_to_lifeline(lifelines);
+                if _r.is_err() { warn!("Error occured {:?}", _r.unwrap_err());}
+            }
+          
             
 
         }else{
@@ -174,7 +206,8 @@ impl TimewarpSelecting {
                 trunk_or_branch: data.trunk_or_branch,
                 timestamp: data.timestamp,
                 oldest_timestamp: data.timestamp,
-                connecting_txs: vec!(),
+                unpinned_connecting_txs: vec!(),
+                connecting_pathway: None,
                 connecting_timestamp: None,
                 connecting_timewarp: None
             }));
@@ -199,7 +232,9 @@ impl TimewarpSelecting {
         let node = &SETTINGS.node_settings.iri_connection(); 
         let last_picked =  &storage.get_last_picked_tw();
         TimewarpSelecting {
-            picked_timewarp: last_picked.to_owned(),
+            picked_timewarp: if last_picked.is_some() {
+                Some(last_picked.as_ref().unwrap().clone())
+            }else { None },
             storage: storage.clone(),            
             node: node.to_string(),
             min_distance_in_seconds: 180,

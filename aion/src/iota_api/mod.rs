@@ -77,7 +77,7 @@ impl PathfindingResult {
         let mut y_memory: Vec<String> = vec!();
         let mut visited_memory: HashSet<String> = HashSet::new();
         let mut current: BTtx = no_target.get_mut(txIDs.last().unwrap()).expect("The last tx id to be always in the map").clone();
-        while current.branch.is_some() || current.trunk.is_some() {
+        while current.mask() != _E || !y_memory.is_empty() {
             match current.mask() {
                 _Y => {
                     y_memory.push(current.branch.as_ref().unwrap().clone());
@@ -86,6 +86,7 @@ impl PathfindingResult {
                         to_return.add_to_path(_E);
                         if last_result.is_none() {
                             //Exit;
+                            break;
                         }else{
                             let tref = last_result.as_ref().unwrap();
                             current = no_target.get_mut(&tref.clone()).unwrap().clone();
@@ -152,7 +153,9 @@ impl PathfindingResult {
 
 pub fn pin_transaction_hashes(node:String, tx_hashes:Vec<String> ) -> Result<Vec<bool>, reqwest::Error> {
 
-    let data = format!("{{\"command\": \"pinTransactionHashes\", \"hashes\": {}}}", serde_json::to_string(&tx_hashes).unwrap());
+    let json_string = serde_json::to_string(&tx_hashes).unwrap();
+    let data = format!("{{\"command\": \"pinTransactionHashes\", \"hashes\": {}}}", json_string);
+
     let string_res = iota_api_call(node.as_str(), data);
     if string_res.is_err() {
         return Err(string_res.unwrap_err())

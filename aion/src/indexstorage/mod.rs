@@ -108,21 +108,24 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     fn get_picked_tw_index(&self, key:i64) -> HashMap<String, String>;
     /// Returnes the latest kown followed timewarp.
     fn get_last_picked_tw(&self) -> Option<TimewarpSelectionState>;
+    fn set_last_picked_tw(&self,  state: TimewarpSelectionState) -> Result<(), String>;
 
     /// When adding transactions to the lifeline there might be a path of hundreds of transactions that require pinning
     /// Therefore lifeline pinning is asynchronous. This function gets lifeline data that still requires pinning.
-    fn get_unpinned_lifeline(&self) -> Vec<LifeLineData>;
+    fn get_unpinned_lifeline(&self) -> Vec<String>;
+    fn set_unpinned_lifeline(&self, ll_data:Vec<String>) -> Result<(), String>;
     /// Appends to the lifeline, this should always be a live process
     fn add_to_lifeline(&self, ll_data:Vec<LifeLineData>) -> Result<(), String>;
     /// Prepends to the known lifeline. The transaction ID of the split + connecting transactions will be added to the
     /// lifeline dataset with a postfix of '_N' where N should mostly be 1 and in rare occations more then 1.
     fn prepend_to_lifeline(&self, ll_data:Vec<LifeLineData>) -> Result<(), String>;
     /// Get lifeline data given en time-index key
-    fn get_lifeline(&self, key:i64) -> Vec<LifeLineData>;
+    fn get_lifeline(&self, key:i64) -> Vec<String>;
     /// Gets the closest lifeline transactions to the given timestamp.
     fn get_lifeline_ts(&self, timestamp:i64) -> Option<LifeLineData>;
     /// Gets a specific lifeline data point given the transaction ID. Note that this might sometimes be post-fixed with '_N'
     fn get_lifeline_tx(&self, key:String) -> Option<LifeLineData>;
+    fn update_lifeline_tx(&self, data:LifeLineData) -> Result<(), String>;
     /// Gets the head of the lifeline.
     fn get_last_lifeline(&self) -> Option<LifeLineData>;
 
@@ -178,7 +181,8 @@ pub struct LifeLineData {
     pub trunk_or_branch: bool,
     pub timestamp: i64,
     pub oldest_timestamp: i64,
-    pub connecting_txs: Vec<String>, //Used to be (String, bool) bool=trunk_or_branch but for validation of the path there should be no difference
+    pub unpinned_connecting_txs: Vec<String>, 
+    pub connecting_pathway: Option<PathwayDescriptor>,
     pub connecting_timestamp: Option<i64>,
     pub connecting_timewarp: Option<String>
 }

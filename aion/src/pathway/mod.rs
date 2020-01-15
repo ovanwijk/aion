@@ -27,7 +27,6 @@ impl PathwayDescriptor {
     pub fn add_to_path(&mut self, what:u8) -> usize {
        
         if self.size % STEPS_PER_FIELD == 0 {
-            //println!("adding!");
             self.fields.push(0b00000000u8);
         }
         let edited = self.fields.last().expect("Last field should always be there");        

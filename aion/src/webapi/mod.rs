@@ -15,6 +15,8 @@ pub mod webask;
 pub struct ReturnData<T> {
     data:T
 }
+
+
 //, data: web::Data<APIActors>
 #[get("/timewarpstate")]
 pub async fn timewarpstateFn(req:HttpRequest, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
@@ -30,6 +32,32 @@ pub async fn timewarpstateFn(req:HttpRequest, data: web::Data<APIActors>) ->  Re
     }
     
 }
+
+
+#[get("/lifeline/unpinned")]
+pub async fn lifelineUnpinnedF(data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
+    //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
+    let r = data.storage.get_unpinned_lifeline();
+    Ok(HttpResponse::Ok()
+    .content_type("application/json")
+    .body( serde_json::to_string_pretty(&ReturnData {
+        data: r
+    }).unwrap()))
+}
+
+
+
+#[get("/lifeline/{id}")]
+pub async fn lifelineIdFn(info: web::Path<String>, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
+    //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
+    let r = data.storage.get_lifeline_tx(info.to_string());
+    Ok(HttpResponse::Ok()
+    .content_type("application/json")
+    .body( serde_json::to_string_pretty(&ReturnData {
+        data: r
+    }).unwrap()))
+}
+
 
 #[get("/timewarp")]
 pub async fn timewarpsFn(req:HttpRequest, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
