@@ -9,6 +9,28 @@ use serde::{Serialize, Deserialize};
 
 
 
+
+async fn iota_api_call_async(node:&str, data: String) ->  Result<String, reqwest::Error>{
+    let client = reqwest::Client::new();
+    let res = client.post(node)
+        .header("ContentType", "application/json")
+        .header("X-IOTA-API-Version", "1")
+        .body(data)
+        .send().await;
+    if res.is_err() {
+        return Err(res.unwrap_err())
+    }
+    let res = res.unwrap().error_for_status();
+    
+    if res.is_err() {
+        return Err(res.unwrap_err())
+    }
+    let result = res.unwrap();
+    
+    Ok(result.text().await.unwrap())
+    
+}
+
 fn iota_api_call(node:&str, data: String) ->  Result<String, reqwest::Error>{
     let client = reqwest::blocking::Client::new();
     let res = client.post(node)
@@ -153,15 +175,18 @@ impl PathfindingResult {
 
 pub fn pin_transaction_hashes(node:String, tx_hashes:Vec<String> ) -> Result<Vec<bool>, reqwest::Error> {
 
-    let json_string = serde_json::to_string(&tx_hashes).unwrap();
-    let data = format!("{{\"command\": \"pinTransactionHashes\", \"hashes\": {}}}", json_string);
-
-    let string_res = iota_api_call(node.as_str(), data);
-    if string_res.is_err() {
-        return Err(string_res.unwrap_err())
+    for txes in tx_hashes.rchunks(50) {
+        let json_string = serde_json::to_string(&txes).unwrap();
+        let data = format!("{{\"command\": \"pinTransactionHashes\", \"hashes\": {}}}", json_string);
+    
+        let string_res = iota_api_call(node.as_str(), data);
+        if string_res.is_err() {
+            return Err(string_res.unwrap_err())
+        }
     }
-    let response: APIResponse = serde_json::from_str(&string_res.expect("Normal text to be available")).unwrap();
-    Ok(response.result)  
+   
+    //let response: APIResponse = serde_json::from_str(&string_res.expect("Normal text to be available")).unwrap();
+    Ok(vec!())  
 }
 pub fn is_pinned(node:String, tx_hashes:Vec<String> ) -> Result<Vec<bool>, reqwest::Error> {
 
@@ -190,6 +215,18 @@ pub fn find_paths(node:String, start:String,  endpoints:Vec<String> ) -> Result<
     //info!("Find paths on: {}", node);
     let data = format!("{{\"command\": \"findPaths\", \"start\": \"{}\" , \"endpoints\": {}}}",start , serde_json::to_string(&endpoints).unwrap());
     let string_res = iota_api_call(node.as_str(), data);
+    if string_res.is_err() {
+        return Err(string_res.unwrap_err())
+    }
+    let response: PathfindingResult = serde_json::from_str(&string_res.expect("Normal text to be available")).unwrap();
+    Ok(response)    
+}
+
+
+pub async fn find_paths_async(node:String, start:String,  endpoints:Vec<String> ) -> Result<PathfindingResult, reqwest::Error> {
+    //info!("Find paths on: {}", node);
+    let data = format!("{{\"command\": \"findPaths\", \"start\": \"{}\" , \"endpoints\": {}}}",start , serde_json::to_string(&endpoints).unwrap());
+    let string_res = iota_api_call_async(node.as_str(), data).await;
     if string_res.is_err() {
         return Err(string_res.unwrap_err())
     }

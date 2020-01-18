@@ -302,8 +302,10 @@ async fn main() -> io::Result<()> {
             actor_system: arc_system.clone(),
             tw_selecting: tw_selection_actor.clone()
         })
-        .service(webapi::lifelineUnpinnedF)
-        .service(webapi::lifelineIdFn)
+        .service(webapi::storage::create_storage_object_fn)
+        .service(webapi::lifeline::lifelineUnpinnedF)
+        .service(webapi::lifeline::lifelineIdFn)
+        .service(webapi::lifeline::lifelineLatestF)
         .service(webapi::timewarpPickedFn)
         .service(webapi::timewarpstateFn)
         .service(webapi::timewarpsFn)

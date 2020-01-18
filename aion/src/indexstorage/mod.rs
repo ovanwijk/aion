@@ -87,7 +87,12 @@ pub fn get_lastest_known_timewarps(st: Arc<dyn Persistence>) -> Vec<TimewarpData
 /// on the managed IOTA node.
 /// 
 /// Timewarp-state: All data related to issuing your own timewarps.
-pub trait Persistence: Send + Sync + std::fmt::Debug {    
+pub trait Persistence: Send + Sync + std::fmt::Debug {
+
+    ///cleans all tracking of timewarps and indexes up till the timewarp
+    fn clean_db(&self, timestamp:i64);
+    
+
     /// Adds values to a time-index key-block.
     fn tw_detection_add_to_index(&self, key:i64, values:Vec<(String, String)>);
     /// Removes values from a time-index key-block
@@ -120,11 +125,11 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     /// lifeline dataset with a postfix of '_N' where N should mostly be 1 and in rare occations more then 1.
     fn prepend_to_lifeline(&self, ll_data:Vec<LifeLineData>) -> Result<(), String>;
     /// Get lifeline data given en time-index key
-    fn get_lifeline(&self, key:i64) -> Vec<String>;
+    fn get_lifeline(&self, key:&i64) -> Vec<String>;
     /// Gets the closest lifeline transactions to the given timestamp.
-    fn get_lifeline_ts(&self, timestamp:i64) -> Option<LifeLineData>;
+    fn get_lifeline_ts(&self, timestamp:&i64) -> Option<LifeLineData>;
     /// Gets a specific lifeline data point given the transaction ID. Note that this might sometimes be post-fixed with '_N'
-    fn get_lifeline_tx(&self, key:String) -> Option<LifeLineData>;
+    fn get_lifeline_tx(&self, key:&String) -> Option<LifeLineData>;
     fn update_lifeline_tx(&self, data:LifeLineData) -> Result<(), String>;
     /// Gets the head of the lifeline.
     fn get_last_lifeline(&self) -> Option<LifeLineData>;
@@ -228,8 +233,8 @@ impl TimewarpData {
         }
     }
 
-    pub fn score(&self) -> usize {
-        (self.index_since_id * self.avg_distance) as usize
+    pub fn score(&self) -> isize {
+        (self.index_since_id * self.avg_distance) as isize
     }
  }
 

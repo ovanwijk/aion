@@ -79,6 +79,8 @@ impl Actor for TimewarpSelecting {
 
 impl TimewarpSelecting {
     fn pick_timewarp(&mut self, ctx:&Context<Protocol>){
+        //We filter using the min_distance_in_seconds of timewarp time so that we are not switching from one to the
+        //if two are started around the same time.
         let timewarps:std::vec::Vec<TimewarpData> = crate::indexstorage::get_lastest_known_timewarps(self.storage.clone())
             .into_iter().filter(|t| t.timestamp > crate::now() - self.min_distance_in_seconds).collect();
         if timewarps.len() == 0 {
@@ -111,7 +113,7 @@ impl TimewarpSelecting {
                 self.store_newly_pick(best_tw.clone());
                 self.storage.set_last_picked_tw(self.picked_timewarp.as_ref().unwrap().clone());
             }else{
-                warn!("Switch required but not yet a path.");
+                warn!("Switch required but not yet a path found.");
             }
             //TODO add to last picked
             //let _a = self.storage.add_last_picked_tw(vec!(best_tw));
@@ -166,8 +168,7 @@ impl TimewarpSelecting {
                             (vec!(), None)
 
                         }else {
-                            info!("Connecting path found");
-                            //TODO turn to actual Vec
+                            info!("Connecting path found");                        
                             let u_path = path_found.unwrap();
                             (*u_path.txIDs.clone(), Some(u_path.to_pathway()))
                            
@@ -175,6 +176,8 @@ impl TimewarpSelecting {
                 }else {
                     (vec!(), None)
                 };
+                //if skipped it mean we consider this particular timewarp transaction to reach to far.
+                //Thus skipping it to add it to our lifeline
                 if !skip { 
                     lifelines.push(LifeLineData {
                         timewarp_tx: connecting_timewarp.hash.clone(),    
@@ -217,8 +220,12 @@ impl TimewarpSelecting {
 
     fn best_timewarp(&self, warps: &Vec<TimewarpData>) -> TimewarpData {
         let mut selected = warps.first().expect("At least one element");
+        
         for x in warps {
-            if x.score() > selected.score() {
+            let score_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash == x.hash { 0}else {180};
+            let selected_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash == selected.hash { 0}else {180};
+            if x.score() - score_sub  
+                > selected.score() -  selected_sub {
                 selected = x;
             }
         }

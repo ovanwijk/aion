@@ -16,6 +16,20 @@ pub struct PathwayDescriptor {
 }
 
 
+
+// impl IntoIterator for PathwayDescriptor {
+//     type Item = u8;
+//     type IntoIter = std::vec::IntoIter<Self::Item>;
+   
+//     fn into_iter(self) -> PathwayIterator{
+//         PathwayIterator{
+//             descriptor:self,
+//             index: 0
+//         }
+//     }
+// }
+
+
 impl PathwayDescriptor {
     pub fn new() -> PathwayDescriptor {
         PathwayDescriptor {
@@ -60,6 +74,19 @@ impl PathwayDescriptor {
         }
 
         result
+    }
+
+    pub fn extend(&mut self, pathway:PathwayDescriptor) {
+        self.size -= 1;
+        //self.add_to_path(if trunk_or_branch {_T}else{_B});
+        let iterator = PathwayIterator{
+            descriptor:pathway,
+            index: 0
+        };
+        for step in iterator {
+            self.add_to_path(step);
+        }
+        //for what in pathway.
     }
 }
 

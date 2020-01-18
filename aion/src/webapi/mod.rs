@@ -7,14 +7,22 @@ use actix_web::{
 };
 //use crate::indexstorage::{get_time_key, TIMEWARP_ID_PREFIX, TimewarpData};
 use serde::{Serialize, Deserialize};
+//use iota_client;
 use crate::APIActors;
+use crate::SETTINGS;
+use iota_lib_rs::prelude::*;
+use iota_model::Transaction;
 pub mod webask;
+pub mod lifeline;
+pub mod storage;
 
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ReturnData<T> {
     data:T
 }
+
+
 
 
 //, data: web::Data<APIActors>
@@ -34,29 +42,7 @@ pub async fn timewarpstateFn(req:HttpRequest, data: web::Data<APIActors>) ->  Re
 }
 
 
-#[get("/lifeline/unpinned")]
-pub async fn lifelineUnpinnedF(data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
-    //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
-    let r = data.storage.get_unpinned_lifeline();
-    Ok(HttpResponse::Ok()
-    .content_type("application/json")
-    .body( serde_json::to_string_pretty(&ReturnData {
-        data: r
-    }).unwrap()))
-}
 
-
-
-#[get("/lifeline/{id}")]
-pub async fn lifelineIdFn(info: web::Path<String>, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
-    //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
-    let r = data.storage.get_lifeline_tx(info.to_string());
-    Ok(HttpResponse::Ok()
-    .content_type("application/json")
-    .body( serde_json::to_string_pretty(&ReturnData {
-        data: r
-    }).unwrap()))
-}
 
 
 #[get("/timewarp")]

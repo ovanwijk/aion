@@ -76,7 +76,7 @@ impl TransactionPinning {
        
        if to_pin_list.len() > 0 {
            let (to_pin, rest) = to_pin_list.split_first().unwrap();
-           let mut lifelinetx = self.storage.get_lifeline_tx(to_pin.clone()).expect("The lifeline transaction to be valid");
+           let mut lifelinetx = self.storage.get_lifeline_tx(&to_pin).expect("The lifeline transaction to be valid");
            let mut to_pin: Vec<String> = vec!(lifelinetx.timewarp_tx.clone());
            to_pin.append(&mut lifelinetx.unpinned_connecting_txs.clone());
            let web_result = iota_api::pin_transaction_hashes(self.node.clone(), to_pin.clone());
