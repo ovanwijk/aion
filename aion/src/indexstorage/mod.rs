@@ -87,6 +87,8 @@ pub fn get_lastest_known_timewarps(st: Arc<dyn Persistence>) -> Vec<TimewarpData
 /// on the managed IOTA node.
 /// 
 /// Timewarp-state: All data related to issuing your own timewarps.
+/// 
+/// Pull jobs: These are persisted jobs that are pulling data from other nodes.
 pub trait Persistence: Send + Sync + std::fmt::Debug {
 
     ///cleans all tracking of timewarps and indexes up till the timewarp
@@ -136,6 +138,12 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
 
     fn save_timewarp_state(&self, state: TimewarpIssuingState);
     fn get_timewarp_state(&self) -> Option<TimewarpIssuingState>;
+
+
+    fn add_pull_job(&self, job:&PullJob);
+    fn update_pull_job(&self, job:&PullJob);
+    fn pop_pull_job(&self, id: String);
+    fn next_pull_job(&self, offset:&usize) -> Option<PullJob>;
    
 }
 
@@ -196,10 +204,9 @@ pub struct PinDescriptor {
     pub id: String,
     pub timestamp: i64,
     pub is_pinned: bool,
-    pub original_start_tx: String,
-    pub original_pathway: PathwayDescriptor,
-    pub lifeline_transaction: String,
-    pub lifeline_adjusted_pathway: PathwayDescriptor,
+    pub lifeline_tx: String,
+    pub pathway: PathwayDescriptor,
+    pub pathway_index_splits: Vec<isize>,    
     pub metadata: String
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -207,6 +214,24 @@ pub struct AwaitPinning {
     pub id: String,
     pub transaction_id: String,
     pub transaction_trytes: Option<String>
+}
+
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PullJob {
+    pub id:String,
+    pub node: String,
+    pub current_tx: String,
+    pub current_index: usize,
+    pub history: Vec<String>,
+    pub validity_pre_check_tx: Vec<String>,
+    pub pathway: PathwayDescriptor
+}
+
+impl PullJob {
+    pub fn max_steps(&self) -> usize {
+        &self.pathway.size - &self.current_index
+    }
 }
 
 

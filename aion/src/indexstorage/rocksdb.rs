@@ -24,6 +24,9 @@ const FOLLOWED_TW_INDEX_RANGE_COLUMN:&str = "FOLLOWED_TW_INDEX_RANGE_COLUMN";
 const LIFELINE_INDEX_COLUMN:&str = "LIFELINE_INDEX_COLUMN";
 const LIFELINE_INDEX_RANGE_COLUMN:&str = "LIFELINE_INDEX_RANGE_COLUMN";
 
+const PULLJOB_ID_COLUMN:&str = "PULLJOB_ID_COLUMN";
+
+
 const PINNED_TX_COUNTER:&str = "PINNED_TX_COUNTER";
 const PATHWAY_DESCRIPTORS:&str = "PATHWAY_DESCRIPTORS";
 const FLEXIBLE_ZERO:&str = "FLEXIBLE_ZERO";
@@ -31,6 +34,7 @@ const PERSISTENT_CACHE:&str = "PERSISTENT_CACHE";
 //Persistent cache keys:
 const P_CACHE_LAST_LIFELIFE:&str = "LAST_LIFELINE";
 const P_CACHE_UNPINNED_LIFELIFE:&str = "UNPINNED_LIFELINE";
+const P_CACHE_PULLJOB:&str = "P_CACHE_PULLJOB";
 
 
 #[derive(Debug)]
@@ -382,7 +386,68 @@ impl Persistence for RocksDBProvider {
         Ok(())
     }
 
+    fn add_pull_job(&self, job:&PullJob) {
+        let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
+        let index_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
+        
+        let mut result:Vec<String> = match self.provider.get_cf(index_handle, P_CACHE_PULLJOB.as_bytes()) {                
+            Ok(Some(value)) => serde_json::from_slice(&*value).unwrap(),
+            Ok(None) => vec!(),
+            Err(e) => {println!("operational problem encountered: {}", e);
+           vec!()}
+        };
+        result.push(job.id.clone());
+        let _r = self.provider.put_cf(handle, job.id.as_bytes(), serde_json::to_vec(&job).unwrap());
+        let _r = self.provider.put_cf(index_handle, P_CACHE_PULLJOB.as_bytes(), serde_json::to_vec(&result).unwrap());
+    }
+
+     fn update_pull_job(&self, job:&PullJob) {
+        let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
+        let _r = self.provider.put_cf(handle, job.id.as_bytes(), serde_json::to_vec(&job).unwrap());
+     }
+     fn pop_pull_job(&self, id: String) {
+        let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
+        let index_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
+        let mut result:Vec<String> = match self.provider.get_cf(index_handle, P_CACHE_PULLJOB.as_bytes()) {                
+            Ok(Some(value)) => serde_json::from_slice(&*value).unwrap(),
+            Ok(None) => vec!(),
+            Err(e) => {println!("operational problem encountered: {}", e);
+           vec!()}
+        };
+        let _r = self.provider.delete_cf(handle, id.as_bytes());
+        if !_r.is_err() {
+            result.retain(|a| a != &id);
+            let _r = self.provider.put_cf(index_handle, P_CACHE_PULLJOB.as_bytes(), serde_json::to_vec(&result).unwrap());          
+        }
+        
+
+     }
+     fn next_pull_job(&self, offset:&usize) -> Option<PullJob> {
+        
+        //return None;
+        let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
+        let index_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
+        let result:Vec<String> = match self.provider.get_cf(index_handle, P_CACHE_PULLJOB.as_bytes()) {                
+            Ok(Some(value)) => serde_json::from_slice(&*value).unwrap(),
+            Ok(None) => vec!(),
+            Err(e) => {println!("operational problem encountered: {}", e);
+           vec!()}
+        };
+        let picked = result.get(std::cmp::min(result.len()-1, 0 + offset));
+        if picked.is_none(){
+            None
+        } else {
+            match self.provider.get_cf(handle, picked.unwrap().as_bytes()) {
+                Ok(Some(value)) => Some(serde_json::from_slice(&*value).unwrap()),
+                Ok(None) => None,
+                Err(e) => {println!("operational problem encountered: {}", e);
+               None}
+            }
+        }
+     }
+
 }
+
 unsafe impl Send for RocksDBProvider {}
 unsafe impl Sync for RocksDBProvider {}
 impl RocksDBProvider {
@@ -401,6 +466,7 @@ impl RocksDBProvider {
             PINNED_TX_COUNTER,
             PATHWAY_DESCRIPTORS,
             FLEXIBLE_ZERO,
+            PULLJOB_ID_COLUMN,
             PERSISTENT_CACHE]).unwrap();
         
         RocksDBProvider {

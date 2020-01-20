@@ -91,8 +91,8 @@ impl PathwayDescriptor {
 }
 
 pub struct PathwayIterator {
-    descriptor: PathwayDescriptor,
-    index: usize
+    pub descriptor: PathwayDescriptor,
+    pub index: usize
 }
 
 

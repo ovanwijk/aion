@@ -37,6 +37,10 @@ impl TimewarpTX for iota_lib_rs::iota_model::Transaction {
     }
 }
 
+pub fn get_trunk_and_branch(trytes:&str) -> (String, String) {
+    (trytes[2430..2511].into(), trytes[2511..2592].into())
+}
+
 pub fn parse_tx_trytes(trytes:&str, hash:&str) -> iota_lib_rs::iota_model::Transaction {
     let mut transaction = iota_lib_rs::iota_model::Transaction::default();
     let tag:String =  trytes[2592..2619].into();

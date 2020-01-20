@@ -60,6 +60,11 @@ struct APIResponse {
     result: Vec<bool>
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct APITryteResponse {
+    pub trytes: Vec<String>
+}
+
 #[derive(Clone, Debug)]
 pub struct BTtx {
     pub branch: Option<String>,
@@ -210,6 +215,17 @@ pub fn pin_transaction_trytes(node:String, tx_hashes:Vec<String> ) -> Result<Vec
     Ok(response.result)    
 }
 
+pub async fn pin_transaction_trytes_async(node:String, tx_hashes:Vec<String> ) -> Result<Vec<bool>, reqwest::Error> {
+
+    let data = format!("{{\"command\": \"pinTransactionsTrytes\", \"trytes\": {}}}", serde_json::to_string(&tx_hashes).unwrap());
+   
+    let string_res = iota_api_call_async(node.as_str(), data).await;
+    if string_res.is_err() {
+        return Err(string_res.unwrap_err())
+    }
+    let response: APIResponse = serde_json::from_str(&string_res.expect("Normal text to be available")).unwrap();
+    Ok(response.result)    
+}
 
 pub fn find_paths(node:String, start:String,  endpoints:Vec<String> ) -> Result<PathfindingResult, reqwest::Error> {
     //info!("Find paths on: {}", node);
@@ -222,6 +238,18 @@ pub fn find_paths(node:String, start:String,  endpoints:Vec<String> ) -> Result<
     Ok(response)    
 }
 
+
+
+pub async fn get_trytes_async(node:String, hashes:Vec<String> ) -> Result<APITryteResponse, reqwest::Error> {
+    //info!("Find paths on: {}", node);
+    let data = format!("{{\"command\": \"getTrytes\",  \"hashes\": {}}}",serde_json::to_string(&hashes).unwrap());
+    let string_res = iota_api_call_async(node.as_str(), data).await;
+    if string_res.is_err() {
+        return Err(string_res.unwrap_err())
+    }
+    let response: APITryteResponse = serde_json::from_str(&string_res.expect("Normal text to be available")).unwrap();
+    Ok(response)    
+}
 
 pub async fn find_paths_async(node:String, start:String,  endpoints:Vec<String> ) -> Result<PathfindingResult, reqwest::Error> {
     //info!("Find paths on: {}", node);
