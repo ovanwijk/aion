@@ -43,7 +43,7 @@ pub async fn connect_storage_object_fn(info: web::Json<CreateStorageReponse>, da
     println!("Getting transaction took: {}", t.elapsed().as_millis());
     t = std::time::Instant::now();
     //crate::iota_api::find_paths(&node, start: String, endpoints: Vec<String>);
-    let r = data.storage.get_lifeline_ts(&(tx.timestamp + 180));
+    let r = if crate::now() - 180 > tx.timestamp { data.storage.get_lifeline_ts(&(tx.timestamp + 180)) }else {data.storage.get_last_lifeline()};
     println!("Getting lifeline took: {}", t.elapsed().as_millis());
     t = std::time::Instant::now();
     if r.is_some() {
@@ -53,7 +53,7 @@ pub async fn connect_storage_object_fn(info: web::Json<CreateStorageReponse>, da
         println!("Find path took: {}", t.elapsed().as_millis());
         t = std::time::Instant::now();
         if !object_found.is_err() {
-            let mut pathway =  object_found.unwrap().to_pathway();
+            let mut pathway =  object_found.unwrap().to_pathway(start.clone());
             //extend the pathway found to the one given.
             pathway.extend(info.pathway.clone());
 
@@ -74,7 +74,7 @@ pub async fn connect_storage_object_fn(info: web::Json<CreateStorageReponse>, da
             .body(json_text.unwrap()));
         }
     }
-    Ok(HttpResponse::Ok().body("Oops"))
+    Ok(HttpResponse::NotFound().body(""))
    
 }
 
@@ -84,9 +84,9 @@ pub async fn store_storage_object_fn(info: web::Json<CreateStorageReponse>, data
     let r = data.storage.get_lifeline_tx(&info.start.clone());
     //if it connects to a lifeline already just return the object.
     if r.is_some() {
-        return Ok(HttpResponse::Ok()
+        return Ok(HttpResponse::NotFound()
         .content_type("application/json")
-        .body(serde_json::to_string_pretty(&info.into_inner()).unwrap()));
+        .body("{\"error\":\"First transaction is not a known lifeline transaction\"}"));
     }
 
     let mut t = std::time::Instant::now();
@@ -109,7 +109,7 @@ pub async fn store_storage_object_fn(info: web::Json<CreateStorageReponse>, data
         println!("Find path took: {}", t.elapsed().as_millis());
         t = std::time::Instant::now();
         if !object_found.is_err() {
-            let mut pathway =  object_found.unwrap().to_pathway();
+            let mut pathway =  object_found.unwrap().to_pathway(start.clone());
             //extend the pathway found to the one given.
             pathway.extend(info.pathway.clone());
 
@@ -130,7 +130,7 @@ pub async fn store_storage_object_fn(info: web::Json<CreateStorageReponse>, data
             .body(json_text.unwrap()));
         }
     }
-    Ok(HttpResponse::Ok().body("Oops"))
+    Ok(HttpResponse::NotFound().body(""))
    
 }
 
@@ -147,8 +147,8 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
     let tx:Transaction = crate::aionmodel::transaction::parse_tx_trytes(&tx_trytes, &info.hashes[0]);
     println!("Getting transaction took: {}", t.elapsed().as_millis());
     t = std::time::Instant::now();
-    //crate::iota_api::find_paths(&node, start: String, endpoints: Vec<String>);
-    let r = data.storage.get_lifeline_ts(&(tx.timestamp + 180));
+    
+    let r = if crate::now() - 180 > tx.timestamp { data.storage.get_lifeline_ts(&(tx.timestamp + 180)) }else {data.storage.get_last_lifeline()};
     println!("Getting lifeline took: {}", t.elapsed().as_millis());
     t = std::time::Instant::now();
     if r.is_some() {
@@ -158,7 +158,7 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
         println!("Find path took: {}", t.elapsed().as_millis());
         t = std::time::Instant::now();
         if !object_found.is_err() {
-            let pathway =  object_found.unwrap().to_pathway();
+            let pathway =  object_found.unwrap().to_pathway(start.clone());
             println!("Pathway transform took: {}", t.elapsed().as_millis());
             t = std::time::Instant::now();
 
@@ -175,6 +175,6 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
             .body(json_text.unwrap()));
         }
     }
-    Ok(HttpResponse::Ok().body("Oops"))
+    Ok(HttpResponse::NotFound().body(""))
    
 }

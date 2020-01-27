@@ -19,7 +19,7 @@ use iota_lib_rs::iota_client::*;
 use iota_client::options::*;
 use iota_model::{Transaction,Transfer};
 //use iota_conversion::trytes_converter;
-
+use std::collections::{VecDeque, HashMap};
 use crate::timewarping::signing::*;
 
 //use crate::Result;
@@ -30,6 +30,8 @@ use crate::timewarping::signing::*;
 pub struct TimewarpIssuer {
     state: TimewarpIssuingState,
     timeout_in_seconds: i64,
+    max_queue_size: i64,
+    milestone_interval_in_seconds: i64,
     promote_timeout_in_seconds: i64,
     storage:Arc<dyn Persistence>,
     node: String
@@ -76,15 +78,19 @@ impl TimewarpIssuer {
                 TimewarpIssuingState {
                     seed: generate_new_seed(),
                     latest_index: String::from("99999"),
-                    latest_tx: "".to_string(),
+                    unconfirmed_txs: vec!(),
+                    latest_confimed_timestamp: -1,
+                    latest_confimed_tx: String::from(""),
                     original_tx: "".to_string(),
                     latest_private_key: Vec::new(),
-                    is_confirmed: false,
-                    latest_timestamp: 0
+                    tx_timestamp: HashMap::new(),
+                    latest_timestamp: -1
                 }
             },
             node: node.to_string(),
-            timeout_in_seconds: 90,
+            timeout_in_seconds: SETTINGS.timewarp_issuing_settings.interval_in_seconds,
+            milestone_interval_in_seconds: 120,
+            max_queue_size: 20,
             promote_timeout_in_seconds: 15,
             storage: storage,
            
@@ -95,32 +101,18 @@ impl TimewarpIssuer {
     }
 
     fn should_restart(&mut self) -> bool {
-        let diff = crate::now() - (SETTINGS.timewarp_issuing_settings.interval_in_seconds * 2);
+        let diff = crate::now() - (self.milestone_interval_in_seconds * 5);
         //self.state.latest_index_num() == 0 ||
-        if  diff > self.state.latest_timestamp  {
+        if  diff > self.state.latest_confimed_timestamp  {
+            info!("Restarting timewarp");
             return true;
         };
         false
     }
 
     fn latest_tx_confirmed(&mut self) -> bool {
-        return self.state.is_confirmed;
-        // if self.state.is_confirmed == false {
-        //     let mut iota = iota_client::Client::new("http://localhost:14265"); //TODO get from settings       
-        //     let confirmed_status = iota.get_inclusion_states(GetInclusionStatesOptions{
-        //         tips: Vec::new(),
-        //         transactions: vec![self.state.latest_tx.clone()]
-        //     }).unwrap();
-        //     let a = confirmed_status.states().as_ref().unwrap();
-        //     self.state.is_confirmed = a[0];
-        //     if a[0] == true {
-        //         info!("Timewarp confirmed");
-        //     }
-          
-        //     a[0]
-        // }else{
-        //     true
-        // }
+        //We standard give it 4 milestones to confirm.
+        return self.state.latest_confimed_timestamp > crate::now() - self.milestone_interval_in_seconds * 4;
     }
 
     fn should_step(&mut self) -> bool {
@@ -132,9 +124,28 @@ impl TimewarpIssuer {
                 _ctx: &Context<Protocol>,
                 _msg: String,
                 _sender: Sender) {
-                    if !self.state.is_confirmed && self.state.latest_tx == _msg {
+                    
+                    if self.state.tx_timestamp.contains_key(&_msg) {
                         info!("Timewarp confirmed");
-                        self.state.is_confirmed = true;
+                        let unconfirmed = self.state.unconfirmed_txs.clone();
+                        let (mut x, mut rest) = unconfirmed.split_first().unwrap();
+                        
+                        let mut latest_ts = self.state.tx_timestamp.get(&_msg).unwrap().clone();
+                        while x != &_msg {
+                            let removed = self.state.tx_timestamp.remove(x);
+                            latest_ts = removed.unwrap().clone();
+                            let a = rest.split_first();
+                            if a.is_none(){
+                                break;
+                            }
+                            let b = a.unwrap();
+                            x = b.0;
+                            rest = b.1;
+                            
+                        }
+                        self.state.unconfirmed_txs = rest.to_vec();
+                        self.state.latest_confimed_tx = _msg.clone();
+                        self.state.latest_confimed_timestamp = latest_ts;
                         self.storage.save_timewarp_state(self.state.clone());
                     }
                 }
@@ -180,9 +191,10 @@ impl TimewarpIssuer {
        
         let increased_index = increase_index(&self.state.latest_index); 
         let key_addres = generate_key_and_address(&self.state.seed, self.state.latest_index_num() as usize);
+        let latest_tx = self.state.latest_tx();
         let tw_hash = calculate_normalized_timewarp_hash(&key_addres.1,
-              if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&self.state.latest_tx} else {&tips_result.trunk_transaction().as_ref().unwrap()} ,
-              if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&tips_result.branch_transaction().as_ref().unwrap()} else {&self.state.latest_tx},
+              if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&latest_tx} else {&tips_result.trunk_transaction().as_ref().unwrap()} ,
+              if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&tips_result.branch_transaction().as_ref().unwrap()} else {&latest_tx},
               &increased_index,
              &self.state.random_id());
         let signed_message_fragment = sign_tw_hash(&self.state.latest_private_key, &tw_hash.0);
@@ -196,8 +208,8 @@ impl TimewarpIssuer {
         
         let prepared_transactions = iota.prepare_transfers(&self.state.seed, vec![transfer], options::PrepareTransfersOptions::default());
         let pow_trytes = iota.attach_to_tangle(options::AttachOptions {
-            branch_transaction: if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&tips_result.branch_transaction().as_ref().unwrap()} else {&self.state.latest_tx},
-            trunk_transaction: if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&self.state.latest_tx} else {&tips_result.trunk_transaction().as_ref().unwrap() }, 
+            branch_transaction: if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&tips_result.branch_transaction().as_ref().unwrap()} else {&latest_tx},
+            trunk_transaction: if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&latest_tx} else {&tips_result.trunk_transaction().as_ref().unwrap() }, 
             min_weight_magnitude: SETTINGS.timewarp_issuing_settings.minimum_weight_magnitude as usize,
             trytes: &prepared_transactions.unwrap(),
             ..options::AttachOptions::default()
@@ -207,21 +219,25 @@ impl TimewarpIssuer {
         iota.broadcast_transactions(&pow_trytes);
 
         let tx: Transaction = pow_trytes[0].parse().unwrap();
-
+        
+        self.state.unconfirmed_txs.push(tx.hash.to_string());
+        self.state.tx_timestamp.insert(tx.hash.to_string(), tx.attachment_timestamp / 1000);
         let new_state = TimewarpIssuingState {
                     latest_index: increased_index,
-                    latest_tx: tx.hash.to_string(),
                     original_tx: self.state.original_tx.clone(),
+                    unconfirmed_txs: self.state.unconfirmed_txs.clone(),
+                    tx_timestamp: self.state.tx_timestamp.clone(),
+                    latest_confimed_timestamp: self.state.latest_confimed_timestamp,
+                    latest_confimed_tx: self.state.latest_confimed_tx.clone(),
                     latest_private_key: key_addres.0,
                     seed: self.state.seed.clone(),
                     latest_timestamp: tx.attachment_timestamp / 1000,
-                    is_confirmed: false
                 
                 };
         self.storage.save_timewarp_state(new_state.clone());
         self.state = new_state;
         //let mut txs:Vec<Transaction> = pow_trytes.iter().map(|x| x.parse()).collect();
-        info!("Issued new timewarp: {}", &self.state.latest_tx);
+        info!("Issued new timewarp: {}", &tx.hash.to_string());
     }
 
     
@@ -231,11 +247,13 @@ impl TimewarpIssuer {
         self.state = TimewarpIssuingState {
                     seed: generate_new_seed(),
                     latest_index: String::from("99999"),
-                    latest_tx: "".to_string(),
+                    latest_confimed_timestamp: 0,
+                    latest_confimed_tx: String::from(""),
+                    tx_timestamp: HashMap::new(),
+                    unconfirmed_txs: vec!(),
                     original_tx: "".to_string(),
                     latest_private_key: Vec::new(),
                     latest_timestamp: 0,
-                    is_confirmed: false
                 };
 
         let mut iota = iota_client::Client::new(&self.node); //TODO get from settings
@@ -264,19 +282,22 @@ impl TimewarpIssuer {
         iota.broadcast_transactions(&pow_trytes);
 
         let tx: Transaction = pow_trytes[0].parse().unwrap();
-
+        let mut tx_timestamp = HashMap::new();
+        tx_timestamp.insert(tx.hash.to_string(), tx.attachment_timestamp/1000);
         let new_state = TimewarpIssuingState {
                     latest_index: self.state.latest_index.to_string(),
-                    latest_tx: tx.hash.to_string(),
+                    unconfirmed_txs: vec!(tx.hash.to_string()),
                     original_tx: tx.hash.to_string(),
+                    tx_timestamp: tx_timestamp,
+                    latest_confimed_timestamp: crate::now(),
+                    latest_confimed_tx: String::from(""),
                     latest_private_key: key_addres.0,
                     seed: self.state.seed.clone(),
                     latest_timestamp: tx.attachment_timestamp / 1000,
-                    is_confirmed: false
                 };
         self.storage.save_timewarp_state(new_state.clone());
         self.state = new_state;
-        info!("Started new timewarp: {}", &self.state.latest_tx);
+        info!("Started new timewarp: {}", &self.state.original_tx);
         //let mut txs:Vec<Transaction> = pow_trytes.iter().map(|x| x.parse()).collect();
         
     }

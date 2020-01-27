@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::pathway::PathwayDescriptor;
 use std::marker::{Send, Sync};
 use std::{
-    collections::{HashMap}};
+    collections::{HashMap, VecDeque}};
 
 
 /// Function that takes a seconds-based timestamp and returns an interger time-key index
@@ -153,11 +153,24 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
 pub struct TimewarpIssuingState {
     pub seed: String,
     pub original_tx: String,
-    pub latest_tx: String,
+    pub unconfirmed_txs: Vec<String>,
+    pub tx_timestamp: HashMap<String, i64>,
+    pub latest_confimed_tx: String,
     pub latest_timestamp: i64,
-    pub is_confirmed:bool,
+    pub latest_confimed_timestamp: i64,
     pub latest_index: String,
     pub latest_private_key: Vec<i8>
+}
+
+impl TimewarpIssuingState {
+    pub fn latest_tx(&self) -> String {
+        if self.unconfirmed_txs.len() == 0 {
+            self.latest_confimed_tx.clone()
+        }else{
+            self.unconfirmed_txs.last().unwrap().clone()
+        }
+            
+    }
 }
 
 impl TimewarpIssuingState {
@@ -193,6 +206,8 @@ pub struct LifeLineData {
     pub timewarp_tx: String,    
     pub trunk_or_branch: bool,
     pub timestamp: i64,
+    pub transactions_till_oldest: i64,
+    pub oldest_tx: String,
     pub oldest_timestamp: i64,
     pub unpinned_connecting_txs: Vec<String>, 
     pub connecting_pathway: Option<PathwayDescriptor>,

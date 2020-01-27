@@ -8,7 +8,9 @@ use crate::APIActors;
 use crate::SETTINGS;
 use crate::webapi::ReturnData;
 
-struct 
+struct LifelineSyncRequest {
+    
+}
 
 
 #[post("/lifeline/connect")]

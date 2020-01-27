@@ -204,6 +204,8 @@ async fn main() -> io::Result<()> {
     if args.len() >= 2 {
         config_file = &args[1];
     }
+
+    
     
     let do_timewarp = &args.contains(&String::from("--timewarp"));
     let only_timewarp = &args.contains(&String::from("--only-timewarp"));

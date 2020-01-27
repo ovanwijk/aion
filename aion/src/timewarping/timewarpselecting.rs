@@ -170,7 +170,7 @@ impl TimewarpSelecting {
                         }else {
                             info!("Connecting path found");                        
                             let u_path = path_found.unwrap();
-                            (*u_path.txIDs.clone(), Some(u_path.to_pathway()))
+                            (*u_path.txIDs.clone(), Some(u_path.to_pathway(connecting_timewarp.hash.to_string())))
                            
                         }
                 }else {
@@ -179,12 +179,16 @@ impl TimewarpSelecting {
                 //if skipped it mean we consider this particular timewarp transaction to reach to far.
                 //Thus skipping it to add it to our lifeline
                 if !skip { 
+                    
                     lifelines.push(LifeLineData {
                         timewarp_tx: connecting_timewarp.hash.clone(),    
                         trunk_or_branch: connecting_timewarp.trunk_or_branch.clone(),
                         timestamp: connecting_timewarp.timestamp,
                         oldest_timestamp: ll_unwrapped.oldest_timestamp.clone(),
                         unpinned_connecting_txs: connecting_txs.0.clone(),
+                        //TODO count transactions and append
+                        transactions_till_oldest : 0,
+                        oldest_tx: ll_unwrapped.oldest_tx.clone(),
                         connecting_pathway: connecting_txs.1.clone(),
                         connecting_timestamp: Some(ll_unwrapped.timestamp),
                         connecting_timewarp: Some(ll_unwrapped.timewarp_tx.clone())
@@ -205,11 +209,13 @@ impl TimewarpSelecting {
             //Unique case, only the first time.
             info!("Initializing lifeline");
             let _r = self.storage.add_to_lifeline(vec!(LifeLineData {
-                timewarp_tx: data.hash,    
+                timewarp_tx: data.hash.clone(),    
                 trunk_or_branch: data.trunk_or_branch,
                 timestamp: data.timestamp,
                 oldest_timestamp: data.timestamp,
                 unpinned_connecting_txs: vec!(),
+                transactions_till_oldest: 0,
+                oldest_tx: data.hash,
                 connecting_pathway: None,
                 connecting_timestamp: None,
                 connecting_timewarp: None

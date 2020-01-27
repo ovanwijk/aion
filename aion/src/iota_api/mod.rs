@@ -75,10 +75,10 @@ pub struct BTtx {
 impl BTtx {
     pub fn mask(&self) -> u8 {
         match (self.branch.as_ref(), self.trunk.as_ref()) {
-            (Some(_), Some(_)) => crate::pathway::_Y,
+            (Some(_a), Some(_b)) => crate::pathway::_Y,
             (None, None) => crate::pathway::_E,
-            (Some(_), None) => crate::pathway::_B,
-            (None, Some(_)) => crate::pathway::_T,
+            (Some(_a), None) => crate::pathway::_B,
+            (None, Some(_b)) => crate::pathway::_T,
         }
     } 
 }
@@ -91,19 +91,30 @@ pub struct PathfindingResult {
 }
 
 impl PathfindingResult {
-    pub fn to_pathway( self) -> crate::pathway::PathwayDescriptor {
+    pub fn to_pathway(self, start: String) -> crate::pathway::PathwayDescriptor {
         let txIDs = self.txIDs.clone();
         let mut no_target:Box<HashMap<String, BTtx>> = Box::new(txIDs.clone().into_iter().map(|v| (v.clone(), BTtx{branch:None, trunk:None, id: v})).collect());
         for t in self.trunks.into_iter() {
+
             no_target.get_mut(&txIDs[t[0]]).unwrap().trunk = Some(txIDs[t[1]].clone());
+            //no_target.get_mut(&txIDs[t[1]]).unwrap().trunk = Some(txIDs[t[0]].clone());
         };
+        let mut c = 0;
+        let mut a = String::from("");
         for b in self.branches.into_iter() {
+            if(no_target.get_mut(&txIDs[b[0]]).unwrap().trunk.is_some()){
+                info!("{}", &txIDs[b[0]]);
+                a = txIDs[b[0]].clone();
+            };
             no_target.get_mut(&txIDs[b[0]]).unwrap().branch = Some(txIDs[b[1]].clone());
+            c+=1;
+            //no_target.get_mut(&txIDs[b[1]]).unwrap().branch = Some(txIDs[b[0]].clone());
         };
+        let test = no_target.get(&a);
         let mut to_return = PathwayDescriptor::new();
         let mut y_memory: Vec<String> = vec!();
         let mut visited_memory: HashSet<String> = HashSet::new();
-        let mut current: BTtx = no_target.get_mut(txIDs.last().unwrap()).expect("The last tx id to be always in the map").clone();
+        let mut current: BTtx = no_target.get_mut(&start).expect("The last tx id to be always in the map").clone();
         while current.mask() != _E || !y_memory.is_empty() {
             match current.mask() {
                 _Y => {
