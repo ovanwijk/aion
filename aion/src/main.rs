@@ -11,6 +11,7 @@ extern crate riker;
 extern crate iota_lib_rs;
 extern crate rocksdb;
 extern crate lru_cache;
+extern crate surf;
 //extern crate bincode;
 #[macro_use] extern crate log;
 extern crate env_logger;
@@ -43,6 +44,7 @@ use timewarping::timewarpindexing::*;
 use timewarping::timewarpissuing::*;
 use timewarping::timewarpselecting::*;
 use timewarping::transactionpinning::*;
+use timewarping::transactionpulling::*;
 
 use timewarping::Protocol;
 use serde_derive::{Deserialize};
@@ -62,7 +64,7 @@ pub const TIMEWARP_INDEXING_ACTOR:&str = "timewarp-actor";
 pub const TIMEWARP_ISSUER_ACTOR:&str = "timewarp-issuer-actor";
 pub const TIMEWARP_SELECTION_ACTOR:&str = "timewarp-selection-actor";
 pub const PINNING_ACTOR:&str = "pinning-actor";
-
+pub const PULLING_ACTOR:&str = "pulling-actor";
 #[derive(Clone, Debug, Deserialize)]
 pub struct AppSettings {
     node_settings: NodeSettings,
@@ -233,6 +235,14 @@ async fn main() -> io::Result<()> {
 
     let storage:Arc<dyn Persistence> = Arc::new(RocksDBProvider::new());
 
+
+
+    // let mut pop = storage.next_pull_job(&0);
+    // while pop.as_ref().is_some() {
+    //     storage.pop_pull_job(pop.unwrap().id);
+    //     pop = storage.next_pull_job(&0);
+    // };
+
     let sys = ActorSystem::new().unwrap();
    
     // let _a = crate::iota::pin_transaction_hash(SETTINGS.node_settings.iri_connection(),
@@ -243,6 +253,9 @@ async fn main() -> io::Result<()> {
     
     let transactionpinning_actor = sys.actor_of(TransactionPinning::props(storage.clone()), PINNING_ACTOR).unwrap();
     transactionpinning_actor.clone().tell(Protocol::Timer, None);
+
+    let transactionpulling_actor = sys.actor_of(TransactionPulling::props(storage.clone()), PULLING_ACTOR).unwrap();
+    transactionpulling_actor.clone().tell(Protocol::Timer, None);
    //  let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
     if !only_timewarp {
@@ -298,6 +311,8 @@ async fn main() -> io::Result<()> {
         io::stdin().read_line(&mut String::new()).unwrap();
     }
     let arc_system = Arc::new(sys);
+
+
     HttpServer::new(
         move || App::new().data(APIActors {
             storage: storage.clone(),
@@ -306,6 +321,8 @@ async fn main() -> io::Result<()> {
         })
         .service(webapi::storage::connect_storage_object_fn)
         .service(webapi::storage::create_storage_object_fn)
+        .service(webapi::storage::get_storage_object_fn)
+        .service(webapi::storage::store_storage_object_fn)
         .service(webapi::lifeline::lifelineUnpinnedF)
         .service(webapi::lifeline::lifelineTsFn)
         .service(webapi::lifeline::lifelineIndexFn)
@@ -326,4 +343,32 @@ async fn main() -> io::Result<()> {
         .run().await
 
 
+}
+
+
+
+
+
+
+mod base64 {
+    extern crate base64;
+    use serde::{Serializer, de, Deserialize, Deserializer};
+
+    pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer
+    {
+        serializer.serialize_str(&base64::encode_config(bytes, base64::URL_SAFE))
+
+        // Could also use a wrapper type with a Display implementation to avoid
+        // allocating the String.
+        //
+        // serializer.collect_str(&Base64(bytes))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Box<Vec<u8>>, D::Error>
+        where D: Deserializer<'de>
+    {
+        let s = <&str>::deserialize(deserializer)?;
+        base64::decode_config(s, base64::URL_SAFE).map_err(de::Error::custom).map(|a| Box::new(a))
+    }
 }

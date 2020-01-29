@@ -25,8 +25,6 @@ const LIFELINE_INDEX_COLUMN:&str = "LIFELINE_INDEX_COLUMN";
 const LIFELINE_INDEX_RANGE_COLUMN:&str = "LIFELINE_INDEX_RANGE_COLUMN";
 
 const PULLJOB_ID_COLUMN:&str = "PULLJOB_ID_COLUMN";
-
-
 const PINNED_TX_COUNTER:&str = "PINNED_TX_COUNTER";
 const PATHWAY_DESCRIPTORS:&str = "PATHWAY_DESCRIPTORS";
 const FLEXIBLE_ZERO:&str = "FLEXIBLE_ZERO";
@@ -51,6 +49,26 @@ impl Persistence for RocksDBProvider {
 
     fn clean_db(&self, timestamp:i64) {
         //TODO implement
+    }
+
+    fn store_pin_descriptor(&self, pin_descriptor:PinDescriptor) -> Result<(), String> {
+        let handle = self.provider.cf_handle(PATHWAY_DESCRIPTORS).unwrap();
+        let _r = self.provider.put_cf(handle, pin_descriptor.id(), serde_json::to_vec(&pin_descriptor).unwrap());
+        if _r.is_err() {
+            Err(_r.unwrap_err().to_string())
+        }else{
+            Ok(())
+        }
+    }
+    fn get_pin_descriptor(&self, id:Vec<u8>) -> Option<PinDescriptor> {
+        let handle = self.provider.cf_handle(PATHWAY_DESCRIPTORS).unwrap();
+        
+        match self.provider.get_cf(handle,  id) {                
+                Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("get_pin_descriptor")),
+                Ok(None) => None,
+                Err(e) => {println!("operational problem encountered: {}", e);
+                None}
+        }
     }
 
     fn tw_detection_add_decision_data(&self, tw:  crate::timewarping::Timewarp) -> TimewarpData { 
@@ -405,6 +423,16 @@ impl Persistence for RocksDBProvider {
         let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
         let _r = self.provider.put_cf(handle, job.id.as_bytes(), serde_json::to_vec(&job).unwrap());
      }
+
+     fn get_pull_job(&self, id: &String) -> Option<PullJob> {
+        let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
+        return  match self.provider.get_cf(handle, id.as_bytes()) {                
+            Ok(Some(value)) => Some(serde_json::from_slice(&*value).unwrap()),
+            Ok(None) => None,
+            Err(e) => {println!("operational problem encountered: {}", e);
+            None}
+        };
+     }
      fn pop_pull_job(&self, id: String) {
         let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
         let index_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
@@ -433,7 +461,7 @@ impl Persistence for RocksDBProvider {
             Err(e) => {println!("operational problem encountered: {}", e);
            vec!()}
         };
-        let picked = result.get(std::cmp::min(result.len()-1, 0 + offset));
+        let picked = if result.is_empty() { None } else { result.get(std::cmp::min(result.len()-1, 0 + offset))};
         if picked.is_none(){
             None
         } else {

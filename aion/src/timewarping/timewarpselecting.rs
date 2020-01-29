@@ -179,7 +179,7 @@ impl TimewarpSelecting {
                 //if skipped it mean we consider this particular timewarp transaction to reach to far.
                 //Thus skipping it to add it to our lifeline
                 if !skip { 
-                    
+
                     lifelines.push(LifeLineData {
                         timewarp_tx: connecting_timewarp.hash.clone(),    
                         trunk_or_branch: connecting_timewarp.trunk_or_branch.clone(),
@@ -228,8 +228,12 @@ impl TimewarpSelecting {
         let mut selected = warps.first().expect("At least one element");
         
         for x in warps {
-            let score_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash == x.hash { 0}else {180};
-            let selected_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash == selected.hash { 0}else {180};
+            let score_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash == x.hash { 0}else {
+                SETTINGS.timewarp_index_settings.detection_threshold_switch_timewarp_in_seconds as isize
+            };
+            let selected_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash == selected.hash { 0}else {
+                SETTINGS.timewarp_index_settings.detection_threshold_switch_timewarp_in_seconds as isize
+            };
             if x.score() - score_sub  
                 > selected.score() -  selected_sub {
                 selected = x;

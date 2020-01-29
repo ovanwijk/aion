@@ -2,9 +2,11 @@
 use crate::SETTINGS;
 use serde::{Serialize, Deserialize};
 use crate::timewarping::signing::*;
+use sha2::{Sha256, Digest};
 pub mod rocksdb;
 use std::sync::Arc;
 use crate::pathway::PathwayDescriptor;
+extern crate base64;
 use std::marker::{Send, Sync};
 use std::{
     collections::{HashMap, VecDeque}};
@@ -32,6 +34,21 @@ pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
         next = next + SETTINGS.timewarp_index_settings.time_index_clustering_in_seconds as i64;
     }
     to_return
+}
+
+
+pub fn storage_hash(start:String, endpoints:&Vec<String>) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.input(start);
+    //we sort the endpoints so we get a standarized result.
+    let mut it = endpoints.clone();
+    it.sort();
+    for r in it {
+        hasher.input(r);
+    }
+    
+    hasher.result().to_vec()
+
 }
 
 pub fn get_n_timewarp_transactions(timewarp_id:String, n:i32, st: Arc<dyn Persistence>) -> Vec<String> {
@@ -139,10 +156,13 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     fn save_timewarp_state(&self, state: TimewarpIssuingState);
     fn get_timewarp_state(&self) -> Option<TimewarpIssuingState>;
 
+    fn store_pin_descriptor(&self, pin_descriptor:PinDescriptor) -> Result<(), String>;
+    fn get_pin_descriptor(&self, id:Vec<u8>) -> Option<PinDescriptor>;
 
     fn add_pull_job(&self, job:&PullJob);
     fn update_pull_job(&self, job:&PullJob);
     fn pop_pull_job(&self, id: String);
+    fn get_pull_job(&self, id: &String) -> Option<PullJob>;
     fn next_pull_job(&self, offset:&usize) -> Option<PullJob>;
    
 }
@@ -216,14 +236,38 @@ pub struct LifeLineData {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PinDescriptor {
-    pub id: String,
     pub timestamp: i64,
-    pub is_pinned: bool,
+    //pub is_pinned: bool,
     pub lifeline_tx: String,
     pub pathway: PathwayDescriptor,
+    pub endpoints: Vec<String>,
     pub pathway_index_splits: Vec<isize>,    
     pub metadata: String
 }
+
+impl PinDescriptor {
+    pub fn id(&self) -> Vec<u8> {
+        storage_hash(self.lifeline_tx.clone(), &self.endpoints)
+    }
+
+    pub fn to_pull_job(&self, node: String) -> PullJob {
+        PullJob{
+            id: base64::encode_config(&self.id(), base64::URL_SAFE),
+            current_tx: self.lifeline_tx.clone(),
+            current_index: 0,
+            history: vec!(),
+            node: node.clone(),
+            pathway: self.pathway.clone(),
+            validity_pre_check_tx: vec!(),
+            status: String::from("await")
+
+
+
+            
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AwaitPinning {
     pub id: String,
@@ -234,8 +278,9 @@ pub struct AwaitPinning {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PullJob {
-    pub id:String,
+    pub id: String,
     pub node: String,
+    pub status: String,
     pub current_tx: String,
     pub current_index: usize,
     pub history: Vec<String>,
@@ -277,6 +322,13 @@ impl TimewarpData {
         (self.index_since_id * self.avg_distance) as isize
     }
  }
+use serde::{Serializer, Deserializer};
+
+//  #[derive(Serialize, Deserialize)]
+// struct Config {
+//     #[serde(serialize_with = "as_base64", deserialize_with = "from_base64")]
+//     key: [u8],
+// }
 
 
 

@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-
+use crate::base64;
 pub const _E:u8 = 0b00000000u8;
 pub const _T:u8 = 0b10000000u8;
 pub const _B:u8 = 0b01000000u8;
@@ -13,6 +13,7 @@ const STEPS_PER_FIELD:usize = 4; //
 pub struct PathwayDescriptor {
     pub size:usize,
     pub tx_count:usize,
+    #[serde(with = "base64")]
     pub fields:Box<Vec<u8>>
 }
 

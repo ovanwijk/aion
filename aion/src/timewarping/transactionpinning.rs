@@ -71,7 +71,7 @@ impl Actor for TransactionPinning {
 
 
 impl TransactionPinning {
-   fn pin_lifelife(&self) {
+   fn pin_lifelife(&self) -> bool {
        let to_pin_list = self.storage.get_unpinned_lifeline();
        
        if to_pin_list.len() > 0 {
@@ -82,17 +82,17 @@ impl TransactionPinning {
            let web_result = iota_api::pin_transaction_hashes(self.node.clone(), to_pin.clone());
            if web_result.is_err() {
                warn!("Error occured");
+               return false;
            }else{
                info!("Pinned {} transactions", to_pin.len());
                 lifelinetx.unpinned_connecting_txs = vec!();
                 self.storage.update_lifeline_tx(lifelinetx);
                 //TODO fix race condition
                 self.storage.set_unpinned_lifeline(rest.to_vec());
+                return true;
            }
-         
-           
-
        }
+       return false;
    }
 }
 
@@ -116,21 +116,22 @@ impl TransactionPinning {
         ctx: &Context<Protocol>,
         msg: WebRequestType,
         sender: Sender) {
-
-           
-      
     }
 
     pub fn receive_timer(&mut self,
         ctx: &Context<Protocol>,
         _sender: Sender) {
-            self.pin_lifelife();
-       
+        if self.pin_lifelife() {
+            ctx.myself().tell(Protocol::Timer,None);
+        }else{
+
         ctx.schedule_once(
             std::time::Duration::from_secs(2),
              ctx.myself(), 
              None, 
              Protocol::Timer);
+        }
+       
     }
 
 }

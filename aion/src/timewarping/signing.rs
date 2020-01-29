@@ -10,8 +10,6 @@ use iota_constants::HASH_TRINARY_SIZE;
 //use std::cmp;
 
 
-
-
 pub fn sign_tw_hash(private_key:&Vec<i8>, tw_hash:&str) -> String {
     //let key_a = private_key;
     let normalized_hash = Bundle::normalized_bundle(&tw_hash);

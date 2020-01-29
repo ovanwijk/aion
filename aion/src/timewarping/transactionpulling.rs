@@ -23,7 +23,7 @@ use crate::timewarping::WebRequestType;
 //use std::collections::HashMap;
 use crate::indexstorage::*;
 
-
+extern crate async_std;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
 #[derive(Debug)]
@@ -32,9 +32,7 @@ pub struct TransactionPulling {
     start_time: i64,
     storage: Arc<dyn Persistence>,
     batching_size: usize,
-    working: bool
-
-    
+    working: bool,
     
 }
 
@@ -75,17 +73,21 @@ impl Actor for TransactionPulling {
 
 
 impl TransactionPulling {
-    async fn do_work(&mut self) {
+    async fn do_work(&mut self) -> bool {
+        let mut finished = true;
         if !self.working {
             self.working = true;
             let job = self.storage.next_pull_job(&0);
             if job.is_some() {
-                
+            
                 let mut unwrapped_job = job.unwrap();
                 let mut pathway_iter = crate::pathway::PathwayIterator {
                     descriptor: unwrapped_job.pathway.clone(),
                     index: unwrapped_job.current_index
                 };
+                let is_local_node = unwrapped_job.node == SETTINGS.node_settings.iri_connection();
+                unwrapped_job.status = String::from("in progress");
+                self.storage.update_pull_job(&unwrapped_job);
                 while unwrapped_job.current_index < unwrapped_job.pathway.size {
                     let mut batch_vec:Vec<String> = vec!();
                     for _i in 0..std::cmp::min(self.batching_size, unwrapped_job.max_steps()) {
@@ -95,7 +97,7 @@ impl TransactionPulling {
                             warn!("Error occurred during pulling {}", t1.unwrap_err());
                             //TODO add error counter
                             self.working = false;
-                            return;
+                            return true;
                         }
                         let u_trytes = t1.unwrap().trytes[0].clone();
                         let t_n_b = get_trunk_and_branch(&u_trytes);
@@ -116,13 +118,15 @@ impl TransactionPulling {
                             },
                             crate::pathway::_E => {
                                 let split = unwrapped_job.history.split_last();
+                                unwrapped_job.current_index += 1;
                                 if split.is_none() {
                                     //means last transaction was pulled.
                                     break;
                                 };
                                 let u_split = split.unwrap();
+                                
                                 unwrapped_job.current_tx = u_split.0.to_string();                        
-                                unwrapped_job.current_index += 1;
+                                
                             },
                             _ => {}
                         };
@@ -132,19 +136,19 @@ impl TransactionPulling {
                         self.storage.update_pull_job(&unwrapped_job);
                     }else{
                         self.working = false;
+                        
                         break;
                     }
                 }
                 self.storage.pop_pull_job(unwrapped_job.id);
                 self.working = false;
-                
+                return false;
             }else{
                 self.working = false;
             }
 
-           
-
         }
+        finished
 
     }
 }
@@ -174,13 +178,18 @@ impl TransactionPulling {
     pub fn receive_timer(&mut self,
         ctx: &Context<Protocol>,
         _sender: Sender) {
-        self.do_work();     
        
-        ctx.schedule_once(
-            std::time::Duration::from_secs(2),
-             ctx.myself(), 
-             None, 
-             Protocol::Timer);
+        let finished =  async_std::task::block_on(self.do_work());     
+        if finished {
+            ctx.schedule_once(
+                std::time::Duration::from_secs(2),
+                 ctx.myself(), 
+                 None, 
+                 Protocol::Timer);
+        }else {
+            ctx.myself().tell(Protocol::Timer, None);
+        }
+       
     }
 
 }

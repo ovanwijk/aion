@@ -9,8 +9,7 @@ use serde::{Serialize, Deserialize};
 
 
 
-
-async fn iota_api_call_async(node:&str, data: String) ->  Result<String, reqwest::Error>{
+async fn iota_api_call_async___(node:&str, data: String) ->  Result<String, reqwest::Error>{
     let client = reqwest::Client::new();
     let res = client.post(node)
         .header("ContentType", "application/json")
@@ -28,6 +27,28 @@ async fn iota_api_call_async(node:&str, data: String) ->  Result<String, reqwest
     let result = res.unwrap();
     
     Ok(result.text().await.unwrap())
+    
+}
+
+
+async fn iota_api_call_async(node:&str, data: String) ->  Result<String, surf::Exception>{
+  
+    let res = surf::post(node)
+        .set_header("ContentType", "application/json")
+        .set_header("X-IOTA-API-Version", "1")
+        .body_string(data)
+        .await;
+    if res.is_err() {
+        return Err(res.unwrap_err())
+    }
+    let mut res = res.unwrap();
+    
+    if res.status() != 200 {
+        return Err(surf::Exception::from("not 200"));
+    }
+    
+    
+    Ok(res.body_string().await.unwrap())
     
 }
 
@@ -183,7 +204,7 @@ impl PathfindingResult {
                 _ => {}
             };
         }
-
+        to_return.add_to_path(_E);
 
         to_return
     }
@@ -226,7 +247,7 @@ pub fn pin_transaction_trytes(node:String, tx_hashes:Vec<String> ) -> Result<Vec
     Ok(response.result)    
 }
 
-pub async fn pin_transaction_trytes_async(node:String, tx_hashes:Vec<String> ) -> Result<Vec<bool>, reqwest::Error> {
+pub async fn pin_transaction_trytes_async(node:String, tx_hashes:Vec<String> ) -> Result<Vec<bool>, surf::Exception> {
 
     let data = format!("{{\"command\": \"pinTransactionsTrytes\", \"trytes\": {}}}", serde_json::to_string(&tx_hashes).unwrap());
    
@@ -251,7 +272,7 @@ pub fn find_paths(node:String, start:String,  endpoints:Vec<String> ) -> Result<
 
 
 
-pub async fn get_trytes_async(node:String, hashes:Vec<String> ) -> Result<APITryteResponse, reqwest::Error> {
+pub async fn get_trytes_async(node:String, hashes:Vec<String> ) -> Result<APITryteResponse, surf::Exception> {
     //info!("Find paths on: {}", node);
     let data = format!("{{\"command\": \"getTrytes\",  \"hashes\": {}}}",serde_json::to_string(&hashes).unwrap());
     let string_res = iota_api_call_async(node.as_str(), data).await;
@@ -262,7 +283,7 @@ pub async fn get_trytes_async(node:String, hashes:Vec<String> ) -> Result<APITry
     Ok(response)    
 }
 
-pub async fn find_paths_async(node:String, start:String,  endpoints:Vec<String> ) -> Result<PathfindingResult, reqwest::Error> {
+pub async fn find_paths_async(node:String, start:String,  endpoints:Vec<String> ) -> Result<PathfindingResult, surf::Exception> {
     //info!("Find paths on: {}", node);
     let data = format!("{{\"command\": \"findPaths\", \"start\": \"{}\" , \"endpoints\": {}}}",start , serde_json::to_string(&endpoints).unwrap());
     let string_res = iota_api_call_async(node.as_str(), data).await;
@@ -274,11 +295,11 @@ pub async fn find_paths_async(node:String, start:String,  endpoints:Vec<String> 
 }
 
 //TODO handle unpinning
-pub async fn unpin_transaction_hashes(node:String, tx_hashes:Vec<String> ) -> Result<(), reqwest::Error> {
+pub async fn unpin_transaction_hashes(node:String, tx_hashes:Vec<String> ) -> Result<(), surf::Exception> {
 
     let data = format!("{{\"command\": \"unpinTransactions\", \"hashes\": {}}}", serde_json::to_string(&tx_hashes).unwrap());
     //let string_res = iota_api_call(node.as_str(), data).await.expect("Normal text to be available");
-    let string_res = iota_api_call(node.as_str(), data);
+    let string_res = iota_api_call_async(node.as_str(), data).await;
     if string_res.is_err() {
         return Err(string_res.unwrap_err())
     }
