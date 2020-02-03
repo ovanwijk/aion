@@ -31,5 +31,6 @@ log = "0.4"
 
 env_logger = { version = "0.7"}
 surf = { version = "*", default-features = false, features = ["native-client"] } # , "middleware-logger"
-
+[features]
+vendored-zmq = ['zmq/vendored']
 [dev-dependencies]
