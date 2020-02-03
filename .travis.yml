@@ -1,0 +1,14 @@
+sudo: false
+dist: trusty
+language: rust
+cache: cargo
+rust:  
+  - stable
+
+matrix: 
+  fast_finish: true
+
+script:
+  - cd aion
+  - cargo build --all --release
+  - cargo test --verbose --all --release
