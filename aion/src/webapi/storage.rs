@@ -173,12 +173,23 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
     let mut iota = iota_client::Client::new(node); //TODO get from settings  
 
     let iota_trytes = iota.get_trytes(&info.hashes);
-    let tx_trytes = &iota_trytes.unwrap_or_default().take_trytes().unwrap_or_default()[0];
-    let tx:Transaction = crate::aionmodel::transaction::parse_tx_trytes(&tx_trytes, &info.hashes[0]);
+    let mut transactions:Vec<Transaction> = vec!();
+    let tx_trytes = &iota_trytes.unwrap_or_default().take_trytes().unwrap_or_default();
+    let mut min:i64 = 9999999999999999;
+    let mut max:i64 = 0;
+    for i in 0..tx_trytes.len() {
+        transactions.push(crate::aionmodel::transaction::parse_tx_trytes(&tx_trytes[i], &info.hashes[i]));
+        min = std::cmp::min(min, transactions[i].attachment_timestamp / 1000);
+        max = std::cmp::max(max, transactions[i].attachment_timestamp / 1000);
+    }
+
     println!("Getting transaction took: {}", t.elapsed().as_millis());
     t = std::time::Instant::now();
-    
-    let r = if crate::now() - 180 > tx.timestamp { data.storage.get_lifeline_ts(&(tx.timestamp + 180)) }else {data.storage.get_last_lifeline()};
+    if max - min > 180 {
+        return Ok(HttpResponse::BadRequest().body("{\"error\": \"Transaction timestamps are more then 3 minutes apart. Call this method multiple times if needed for different times.\"}"))
+    }
+    //TODO fix magic numer 180
+    let r = if crate::now() - 180 > min { data.storage.get_lifeline_ts(&(min + 180)) }else {data.storage.get_last_lifeline()};
     println!("Getting lifeline took: {}", t.elapsed().as_millis());
     t = std::time::Instant::now();
     if r.is_some() {
@@ -206,6 +217,6 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
             .body(json_text.unwrap()));
         }
     }
-    Ok(HttpResponse::NotFound().body(""))
+    Ok(HttpResponse::NotFound().body("{\"error\": \"No lifeline found to connect to.\"}"))
    
 }
