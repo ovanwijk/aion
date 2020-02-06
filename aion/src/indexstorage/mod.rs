@@ -221,6 +221,11 @@ pub struct TimewarpData {
     pub avg_distance: i64,
     pub index_since_id: i64,
 }
+
+pub fn empty() -> String{
+    String::new()
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LifeLineData {
     pub timewarp_tx: String,    
@@ -228,6 +233,7 @@ pub struct LifeLineData {
     pub timestamp: i64,
     pub transactions_till_oldest: i64,
     pub oldest_tx: String,
+    #[serde(default = "empty")]
     pub timewarp_id: String,
     pub oldest_timestamp: i64,
     pub unpinned_connecting_txs: Vec<String>, 
