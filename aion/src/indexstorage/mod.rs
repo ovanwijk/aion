@@ -235,6 +235,27 @@ pub struct LifeLineData {
     pub connecting_timestamp: Option<i64>,
     pub connecting_timewarp: Option<String>
 }
+
+impl Default for LifeLineData {
+    fn default() -> LifeLineData {
+        LifeLineData{ 
+            timewarp_tx: String::new(),
+            oldest_tx: String::new(),
+            timewarp_id: String::new(),
+            timestamp: 0,
+            oldest_timestamp: 0,
+            trunk_or_branch: true,
+            transactions_till_oldest: 0, 
+            unpinned_connecting_txs: vec!(),
+            connecting_pathway: None,
+            connecting_timestamp: None,
+            connecting_timewarp: None
+
+        }
+    }
+}
+
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PinDescriptor {
     pub timestamp: i64,

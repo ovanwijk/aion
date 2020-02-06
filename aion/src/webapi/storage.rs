@@ -179,8 +179,8 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
     let mut max:i64 = 0;
     for i in 0..tx_trytes.len() {
         transactions.push(crate::aionmodel::transaction::parse_tx_trytes(&tx_trytes[i], &info.hashes[i]));
-        min = std::cmp::min(min, transactions[i].attachment_timestamp / 1000);
-        max = std::cmp::max(max, transactions[i].attachment_timestamp / 1000);
+        min = std::cmp::min(min, transactions[i].attachment_timestamp);
+        max = std::cmp::max(max, transactions[i].attachment_timestamp);
     }
 
     println!("Getting transaction took: {}", t.elapsed().as_millis());

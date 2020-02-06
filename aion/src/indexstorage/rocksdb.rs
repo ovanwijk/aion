@@ -158,7 +158,7 @@ impl Persistence for RocksDBProvider {
         }
        // let it = self.get_lifeline(get_time_key(&timestamp));
         if found.is_none() {
-            warn!("No lifeline found");
+            warn!("No lifeline found for {}", timestamp);
         }
       
         found
