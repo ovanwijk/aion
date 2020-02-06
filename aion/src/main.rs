@@ -71,6 +71,12 @@ pub struct AppSettings {
     timewarp_index_settings: TimewarpIndexSettings,
     cache_settings: CacheSettings,
     timewarp_issuing_settings: TimewarpIssuingSettings,
+    api_settings: APISettings
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct APISettings {
+    binding: String
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -101,6 +107,7 @@ pub struct CacheSettings {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct TimewarpIssuingSettings {
+    enabled: bool,
     interval_in_seconds: i64,
     promote_interval_in_seconds: i64,
     tip_selection_depth: i64,
@@ -166,11 +173,15 @@ lazy_static! {
                     selection_xor_key: "".to_string()
                 },
                 timewarp_issuing_settings: TimewarpIssuingSettings {
+                    enabled: lconfig["timewarp_issuing"]["enabled"].as_bool().unwrap(),
                     interval_in_seconds: lconfig["timewarp_issuing"]["interval_in_seconds"].as_i64().unwrap(),
                     promote_interval_in_seconds: lconfig["timewarp_issuing"]["promote_interval_in_seconds"].as_i64().unwrap(),
                     tip_selection_depth: lconfig["timewarp_issuing"]["tip_selection_depth"].as_i64().unwrap(), 
                     minimum_weight_magnitude: lconfig["timewarp_issuing"]["minimum_weight_magnitude"].as_i64().unwrap(),
                     trunk_or_branch: lconfig["timewarp_issuing"]["trunk_or_branch"].as_bool().unwrap()
+                }, 
+                api_settings: APISettings {
+                    binding: lconfig["api"]["binding"].as_string().unwrap(),
                 }
             }
             
@@ -178,9 +189,6 @@ lazy_static! {
     };
 }
 
-// struct AskActor {
-//     future: Future<>
-// }
 
 pub struct APIActors {
     storage: Arc<dyn Persistence>,
@@ -188,11 +196,6 @@ pub struct APIActors {
     tw_selecting: riker::actor::ActorRef<timewarping::Protocol>
 }
 
-// impl APIActors {
-//     pub async fn ask_pattern (&self, actor:riker::actor::ActorRef<timewarping::Protocol>) -> timewarping::Protocol {
-//         self.actor_system.
-//     }
-// }
 
 
 #[actix_rt::main]
@@ -339,7 +342,7 @@ async fn main() -> io::Result<()> {
             // .service(
             //   web::resource("/test").route(web::get().to(index)))
             )
-        .bind("0.0.0.0:8080")?
+        .bind(SETTINGS.api_settings.binding.clone().as_str())?
         .run().await
 
 

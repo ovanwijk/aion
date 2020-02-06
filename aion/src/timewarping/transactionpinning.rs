@@ -81,7 +81,7 @@ impl TransactionPinning {
            to_pin.append(&mut lifelinetx.unpinned_connecting_txs.clone());
            let web_result = iota_api::pin_transaction_hashes(self.node.clone(), to_pin.clone());
            if web_result.is_err() {
-               warn!("Error occured");
+               warn!("Error occured {}", web_result.unwrap_err().to_string());
                return false;
            }else{
                info!("Pinned {} transactions", to_pin.len());

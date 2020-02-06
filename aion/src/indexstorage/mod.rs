@@ -228,6 +228,7 @@ pub struct LifeLineData {
     pub timestamp: i64,
     pub transactions_till_oldest: i64,
     pub oldest_tx: String,
+    pub timewarp_id: String,
     pub oldest_timestamp: i64,
     pub unpinned_connecting_txs: Vec<String>, 
     pub connecting_pathway: Option<PathwayDescriptor>,

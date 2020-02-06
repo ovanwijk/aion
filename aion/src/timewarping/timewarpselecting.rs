@@ -181,6 +181,7 @@ impl TimewarpSelecting {
                 if !skip { 
 
                     lifelines.push(LifeLineData {
+                        timewarp_id: connecting_timewarp.timewarpid.clone(),
                         timewarp_tx: connecting_timewarp.hash.clone(),    
                         trunk_or_branch: connecting_timewarp.trunk_or_branch.clone(),
                         timestamp: connecting_timewarp.timestamp,
@@ -215,6 +216,7 @@ impl TimewarpSelecting {
                 oldest_timestamp: data.timestamp,
                 unpinned_connecting_txs: vec!(),
                 transactions_till_oldest: 0,
+                timewarp_id: data.timewarpid,
                 oldest_tx: data.hash,
                 connecting_pathway: None,
                 connecting_timestamp: None,

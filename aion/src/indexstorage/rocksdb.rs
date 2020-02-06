@@ -80,7 +80,7 @@ impl Persistence for RocksDBProvider {
         }else{
             info!("New timewarp: {}", tw.source_hash.clone());
             TimewarpData {
-                timewarpid: tw.source_hash.clone(),
+                timewarpid: tw.source_hash.clone()[0..9].to_string(),
                 hash: tw.source_hash.clone(),
                 branch: tw.source_branch,
                 trunk: tw.source_trunk,
@@ -333,7 +333,7 @@ impl Persistence for RocksDBProvider {
         }
     }
 
-
+    //TODO implement
     fn prepend_to_lifeline(&self, ll_data: Vec<LifeLineData>) -> Result<(), String> {
         Ok(())
     }
