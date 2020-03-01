@@ -32,6 +32,7 @@ use iota_lib_rs::*;
 use actix_web::{
      App, HttpServer,
 };
+use actix_web::middleware::DefaultHeaders;
 use riker::actors::*;
 use hocon::HoconLoader;
 use std::*;
@@ -135,11 +136,13 @@ pub fn now() -> i64 {
     let since_the_epoch = start.duration_since(UNIX_EPOCH);
     since_the_epoch.unwrap().as_secs() as i64
 }
-// /// This handler uses json extractor
-// fn index(item: web::Json<MyObj>) -> HttpResponse {
-//     println!("model: {:?}", &item);
-//     HttpResponse::Ok().json(item.0) // <- send response
-// }
+
+use std::convert::TryInto;
+pub fn read_be_i64(input: &mut &[u8]) -> i64 {
+    let (int_bytes, rest) = input.split_at(std::mem::size_of::<i64>());
+    *input = rest;
+    i64::from_be_bytes(int_bytes.try_into().unwrap())
+}
 
 
 static mut HOCON_CONFIG:Option<hocon::Hocon> = None; 
@@ -250,7 +253,7 @@ async fn main() -> io::Result<()> {
    
     // let _a = crate::iota::pin_transaction_hash(SETTINGS.node_settings.iri_connection(),
     //      vec!("AQEXQMGPTUARFAYMMHNJMNKQGQCRSTZGSUOMGG9CIOOMTHP99KMYVUHJTEGZKXLCVBBFLEMTUIMCAQFG9".to_string())).await;
-    let zmq_actor = sys.actor_of(ZMQListener::props(), ZMQ_LISTENER_ACTOR).unwrap();
+    let zmq_actor = sys.actor_of(ZMQListener::props(storage.clone()), ZMQ_LISTENER_ACTOR).unwrap();
     let tw_selection_actor = sys.actor_of(TimewarpSelecting::props(storage.clone()), TIMEWARP_SELECTION_ACTOR).unwrap();
 
     
@@ -322,6 +325,7 @@ async fn main() -> io::Result<()> {
             actor_system: arc_system.clone(),
             tw_selecting: tw_selection_actor.clone()
         })
+        .wrap(DefaultHeaders::new().header("Access-Control-Allow-Origin", "*"))
         .service(webapi::storage::connect_storage_object_fn)
         .service(webapi::storage::create_storage_object_fn)
         .service(webapi::storage::get_storage_object_fn)
@@ -336,7 +340,7 @@ async fn main() -> io::Result<()> {
         .service(webapi::timewarpsFn)
         .service(webapi::timewarpIdFn)
         .service(webapi::timewarpIdMaxFn)
-        
+        .service(webapi::aionStatusFn)
 
         
             // .service(

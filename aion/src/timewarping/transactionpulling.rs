@@ -12,7 +12,7 @@ use riker::actors::Context;
 use crate::iota_api;
 //use iota_lib_rs::iota_model::Transaction;
 //use crate::aionmodel::tangle::*;
-use crate::indexstorage::Persistence;
+use crate::indexstorage::*;
 //use crate::timewarping::zmqlistener::*;
 use crate::aionmodel::transaction::get_trunk_and_branch;
 use crate::timewarping::Protocol;
@@ -21,7 +21,7 @@ use crate::timewarping::WebRequestType;
 // use crate::timewarping::signing;
 // use crate::timewarping::timewarpwalker::*;
 //use std::collections::HashMap;
-use crate::indexstorage::*;
+
 
 extern crate async_std;
 use std::sync::Arc;
@@ -74,7 +74,7 @@ impl Actor for TransactionPulling {
 
 impl TransactionPulling {
     async fn do_work(&mut self) -> bool {
-        let mut finished = true;
+        let finished = true;
         if !self.working {
             self.working = true;
             let job = self.storage.next_pull_job(&0);
@@ -86,7 +86,8 @@ impl TransactionPulling {
                     index: unwrapped_job.current_index
                 };
                 let is_local_node = unwrapped_job.node == SETTINGS.node_settings.iri_connection();
-                unwrapped_job.status = String::from("in progress");
+                unwrapped_job.status = PIN_STATUS_IN_PROGRESS.to_string();
+                unwrapped_job.last_update = crate::now();
                 self.storage.update_pull_job(&unwrapped_job);
                 while unwrapped_job.current_index < unwrapped_job.pathway.size {
                     let mut batch_vec:Vec<String> = vec!();
@@ -96,6 +97,9 @@ impl TransactionPulling {
                         if t1.is_err() {
                             warn!("Error occurred during pulling {}", t1.unwrap_err());
                             //TODO add error counter
+                            unwrapped_job.status = PIN_STATUS_NODE_ERROR.to_string();
+                            unwrapped_job.last_update = crate::now();
+                            self.storage.update_pull_job(&unwrapped_job);
                             self.working = false;
                             return true;
                         }
@@ -135,6 +139,9 @@ impl TransactionPulling {
                     if !pinned_trytes.is_err() {
                         self.storage.update_pull_job(&unwrapped_job);
                     }else{
+                        unwrapped_job.status = PIN_STATUS_PIN_ERROR.to_string();
+                        unwrapped_job.last_update = crate::now();
+                        self.storage.update_pull_job(&unwrapped_job);
                         self.working = false;
                         
                         break;
@@ -145,6 +152,7 @@ impl TransactionPulling {
                 return false;
             }else{
                 self.working = false;
+                return true;
             }
 
         }

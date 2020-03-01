@@ -9,7 +9,8 @@ use std::time::Duration;
 use crate::aionmodel::transaction::*;
 use crate::timewarping::Protocol;
 use crate::SETTINGS;
-
+use crate::indexstorage::Persistence;
+use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct StartListening {
     pub host: String,
@@ -36,7 +37,8 @@ pub struct NewTransaction {
 //#[actor(StartListening, RegisterRoutee, PullTxData)]
 pub struct ZMQListener {
      routees: LinkedList<BasicActorRef>,
-     socket: Socket
+     socket: Socket,
+     storage: Arc<dyn Persistence>
 }
 
 impl Actor for ZMQListener {
@@ -62,11 +64,12 @@ impl Actor for ZMQListener {
 
 
 impl ZMQListener {
-    fn actor() -> Self {
+    fn actor(storage: Arc<dyn Persistence>) -> Self {
         let ctx = zmq::Context::new();
         let socket = ctx.socket(zmq::SUB).unwrap();
         ZMQListener {
             routees: LinkedList::new(),
+            storage: storage,
             socket: socket
         }
     }
@@ -79,6 +82,7 @@ impl ZMQListener {
         self.socket.connect(&node).unwrap();
         self.socket.set_subscribe("tx_trytes ".as_bytes()).unwrap();
         self.socket.set_subscribe("sn ".as_bytes()).unwrap();
+        self.socket.set_subscribe("lmi ".as_bytes()).unwrap();
 
         _ctx.myself.tell(Protocol::PullTxData(PullTxData), None);
       
@@ -98,6 +102,8 @@ impl ZMQListener {
                 _ctx: &Context<Protocol>,
                 _msg: PullTxData,
                 _sender: Sender) {
+        
+        
         let msg = self.socket.recv_msg(zmq::DONTWAIT);
         if msg.is_ok() {
             let msg = msg.unwrap();
@@ -116,7 +122,13 @@ impl ZMQListener {
                 for routee in &self.routees {
                     let _res = routee.try_tell(Protocol::TransactionConfirmed(tx_.to_string()), None);                
                 }
-            }            
+            }else if msg_string.starts_with("lmi ") {
+                let split: Vec<&str> = msg_string.split(" ").collect();
+                info!("New milestone found");
+                //No need to parse the number, it is cosmetic
+                self.storage.set_generic_cache(crate::indexstorage::LMI_CONST, split[1].parse::<i64>().unwrap().to_be_bytes().to_vec());
+                self.storage.set_generic_cache(crate::indexstorage::LMI_TIME, crate::now().to_be_bytes().to_vec()); 
+            }         
     
             _ctx.myself().tell(Protocol::PullTxData(PullTxData), None);
         }else{
@@ -127,8 +139,8 @@ impl ZMQListener {
         }            
     }
 
-    pub fn props() -> BoxActorProd<ZMQListener> {
-        Props::new(ZMQListener::actor)
+    pub fn props(storage: Arc<dyn Persistence>) -> BoxActorProd<ZMQListener> {
+        Props::new_args(ZMQListener::actor, storage)
     }
 }
 

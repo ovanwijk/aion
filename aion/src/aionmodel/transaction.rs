@@ -46,6 +46,7 @@ pub fn parse_tx_trytes(trytes:&str, hash:&str) -> iota_lib_rs::iota_model::Trans
     let tag:String =  trytes[2592..2619].into();
     let now = crate::now();
     let transaction_trits = trytes.trits();
+    let attachment = iota_conversion::long_value(&transaction_trits[7857..7884]) / 1000;
     transaction.hash = String::from(hash);
     transaction.signature_fragments = if tag.ends_with("TW") { trytes[0..2187].into() } else { "".to_owned() };
     transaction.address = trytes[2187..2268].into();
@@ -60,8 +61,10 @@ pub fn parse_tx_trytes(trytes:&str, hash:&str) -> iota_lib_rs::iota_model::Trans
     transaction.trunk_transaction = trytes[2430..2511].into();
     transaction.branch_transaction = trytes[2511..2592].into();
     transaction.tag = tag;
-    transaction.attachment_timestamp =
-         iota_conversion::long_value(&transaction_trits[7857..7884]) / 1000;
+    transaction.attachment_timestamp = if attachment == 0 {transaction.timestamp}else{
+        attachment
+    };
+       //  iota_conversion::long_value(&transaction_trits[7857..7884]) / 1000;
     // transaction.attachment_timestamp_lower_bound =
     //     iota_conversion::long_value(&transaction_trits[7884..7911]);
     // transaction.attachment_timestamp_upper_bound =

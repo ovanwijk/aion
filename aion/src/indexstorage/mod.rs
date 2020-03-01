@@ -21,9 +21,24 @@ use crate::timewarping::timewarpselecting::TimewarpSelectionState;
 
 
 pub const TIMEWARP_ID_PREFIX:&str = "TW_ID";
+pub const LMI_CONST:&str = "LMI";
+pub const LMI_TIME:&str = "LMI_TIME";
+pub const TIME_SINCE_LL_CONNECT:&str = "LL_CONNECT";
+pub const ALL_STARTED:&str = "ALL_STARTED";
 
 pub const LAST_PICKED_TW_ID:&str = "LAST_PICKED_TW_ID";
 pub const TW_ISSUING_STATE:&str = "TW_ISSUING_STATE";
+
+pub const PIN_STATUS_AWAIT:&str = "await";
+pub const PIN_STATUS_IN_PROGRESS:&str = "in progress";
+pub const PIN_STATUS_NODE_ERROR:&str = "node error";
+pub const PIN_STATUS_PIN_ERROR:&str = "pinning error";
+
+//Persistent cache keys:
+pub const P_CACHE_LAST_LIFELIFE:&str = "LAST_LIFELINE";
+pub const P_CACHE_UNPINNED_LIFELIFE:&str = "UNPINNED_LIFELINE";
+pub const P_CACHE_PULLJOB:&str = "P_CACHE_PULLJOB";
+pub const P_CACHE_FAULTY_PULLJOB:&str = "P_CACHE_FAULTY_PULLJOB";
 
 /// Given a start and end timestamp returns a range of time-indexes.
 pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
@@ -164,7 +179,12 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     fn pop_pull_job(&self, id: String);
     fn get_pull_job(&self, id: &String) -> Option<PullJob>;
     fn next_pull_job(&self, offset:&usize) -> Option<PullJob>;
+    fn list_pull_jobs(&self) -> Vec<String>;
+    fn list_faulty_pull_jobs(&self) -> Vec<String>;
    
+
+    fn set_generic_cache(&self,key:&str, value:Vec<u8>) -> Result<(), String>;
+    fn get_generic_cache(&self,key:&str) -> Option<Vec<u8>>;
 }
 
 
@@ -284,14 +304,11 @@ impl PinDescriptor {
             current_tx: self.lifeline_tx.clone(),
             current_index: 0,
             history: vec!(),
+            last_update: crate::now(),
             node: node.clone(),
             pathway: self.pathway.clone(),
             validity_pre_check_tx: vec!(),
-            status: String::from("await")
-
-
-
-            
+            status: PIN_STATUS_AWAIT.to_string()
         }
     }
 }
@@ -309,6 +326,7 @@ pub struct PullJob {
     pub id: String,
     pub node: String,
     pub status: String,
+    pub last_update: i64,
     pub current_tx: String,
     pub current_index: usize,
     pub history: Vec<String>,

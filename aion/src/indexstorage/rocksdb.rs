@@ -29,10 +29,7 @@ const PINNED_TX_COUNTER:&str = "PINNED_TX_COUNTER";
 const PATHWAY_DESCRIPTORS:&str = "PATHWAY_DESCRIPTORS";
 const FLEXIBLE_ZERO:&str = "FLEXIBLE_ZERO";
 const PERSISTENT_CACHE:&str = "PERSISTENT_CACHE";
-//Persistent cache keys:
-const P_CACHE_LAST_LIFELIFE:&str = "LAST_LIFELINE";
-const P_CACHE_UNPINNED_LIFELIFE:&str = "UNPINNED_LIFELINE";
-const P_CACHE_PULLJOB:&str = "P_CACHE_PULLJOB";
+
 
 
 #[derive(Debug)]
@@ -212,20 +209,15 @@ impl Persistence for RocksDBProvider {
     }
 
     fn set_unpinned_lifeline(&self, data:Vec<String>) -> Result<(), String> {
-        //let mut old_unpinned = self.get_unpinned_lifeline();
+       
+        self.set_generic_cache(P_CACHE_UNPINNED_LIFELIFE, serde_json::to_vec(&data).unwrap())
         
-        let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
-        let _r = self.provider.put_cf(handle, P_CACHE_UNPINNED_LIFELIFE.as_bytes(), serde_json::to_vec(&data).unwrap());
-        if _r.is_err() {
-            return Err(format!("Error occured {:?}", _r.unwrap_err()));
-        }
-        Ok(())
     }
    
     fn save_timewarp_state(&self, state: TimewarpIssuingState) {
-        
-        let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
-        let _r = self.provider.put_cf(handle, TW_ISSUING_STATE.as_bytes(), serde_json::to_vec(&state).unwrap()).unwrap();
+        self.set_generic_cache(TW_ISSUING_STATE, serde_json::to_vec(&state).unwrap());
+        // let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
+        // let _r = self.provider.put_cf(handle, TW_ISSUING_STATE.as_bytes(), serde_json::to_vec(&state).unwrap()).unwrap();
     }
     fn get_timewarp_state(&self) -> Option<TimewarpIssuingState> {
         let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
@@ -236,6 +228,26 @@ impl Persistence for RocksDBProvider {
                 Err(e) => {println!("operational problem encountered: {}", e);
                 None}
         }
+    }
+    fn set_generic_cache(&self, key:&str, value:Vec<u8>) -> Result<(), String> {
+        let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
+        let _r = self.provider.put_cf(handle, key.as_bytes(), value);
+        if _r.is_ok(){
+            Ok(())
+        }else{
+            Err(format!("{}", _r.unwrap_err()))
+        }
+        
+    }
+    fn get_generic_cache(&self, key:&str) -> Option<Vec<u8>> {
+        let handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();        
+        match self.provider.get_cf(handle,  key.as_bytes()) {                
+            Ok(Some(value)) => Some(value.to_vec()),
+            Ok(None) => None,
+            Err(e) => {println!("operational problem encountered: {}", e);
+            None}
+        }
+
     }
 
 
@@ -281,11 +293,9 @@ impl Persistence for RocksDBProvider {
     fn tw_detection_get_all(&self, keys:Vec<&i64>) ->HashMap<String, String> {HashMap::new()}
 
     fn set_last_picked_tw(&self,  state: TimewarpSelectionState) -> Result<(), String> {
-        let cache_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
-        self.provider.put_cf(cache_handle, LAST_PICKED_TW_ID.as_bytes(), serde_json::to_vec(&state).unwrap());
 
-
-        Ok(())
+        self.set_generic_cache(crate::indexstorage::TIME_SINCE_LL_CONNECT, crate::now().to_be_bytes().to_vec());
+        self.set_generic_cache(LAST_PICKED_TW_ID,serde_json::to_vec(&state).unwrap())
     }
 
 
@@ -422,7 +432,46 @@ impl Persistence for RocksDBProvider {
      fn update_pull_job(&self, job:&PullJob) {
         let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
         let _r = self.provider.put_cf(handle, job.id.as_bytes(), serde_json::to_vec(&job).unwrap());
+        if job.status.as_str() == PIN_STATUS_PIN_ERROR || job.status.as_str() == PIN_STATUS_NODE_ERROR {
+
+            //Add to faulty list
+            let mut failed_pull_jobs:Vec<String> = match self.get_generic_cache(P_CACHE_FAULTY_PULLJOB) {                
+                Some(value) => serde_json::from_slice(&*value).unwrap(),
+                None => vec!()
+               };
+                      
+            
+            failed_pull_jobs.push(job.id.to_string());
+            self.set_generic_cache(P_CACHE_FAULTY_PULLJOB, serde_json::to_vec(&failed_pull_jobs).unwrap());  
+
+
+            //Remove from standard list
+           
+            let mut pull_jobs:Vec<String> = match self.get_generic_cache(P_CACHE_PULLJOB) {                
+                Some(value) => serde_json::from_slice(&*value).unwrap(),
+                None => vec!()
+               };
+                    
+            
+            pull_jobs.retain(|a| a != &job.id);
+            self.set_generic_cache(P_CACHE_PULLJOB, serde_json::to_vec(&pull_jobs).unwrap());             
+                      
+        }
+        
      }
+
+     fn list_pull_jobs(&self) -> Vec<String> {
+        match self.get_generic_cache(P_CACHE_PULLJOB) {                
+            Some(value) => serde_json::from_slice(&*value).unwrap(),
+            None => vec!()
+           }
+     }
+    fn list_faulty_pull_jobs(&self) -> Vec<String> {
+        match self.get_generic_cache(P_CACHE_FAULTY_PULLJOB) {                
+            Some(value) => serde_json::from_slice(&*value).unwrap(),
+            None => vec!()
+           }
+    }
 
      fn get_pull_job(&self, id: &String) -> Option<PullJob> {
         let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
@@ -436,7 +485,7 @@ impl Persistence for RocksDBProvider {
      fn pop_pull_job(&self, id: String) {
         let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
         let index_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
-        let mut result:Vec<String> = match self.provider.get_cf(index_handle, P_CACHE_PULLJOB.as_bytes()) {                
+        let mut pull_jobs:Vec<String> = match self.provider.get_cf(index_handle, P_CACHE_PULLJOB.as_bytes()) {                
             Ok(Some(value)) => serde_json::from_slice(&*value).unwrap(),
             Ok(None) => vec!(),
             Err(e) => {println!("operational problem encountered: {}", e);
@@ -444,8 +493,8 @@ impl Persistence for RocksDBProvider {
         };
         let _r = self.provider.delete_cf(handle, id.as_bytes());
         if !_r.is_err() {
-            result.retain(|a| a != &id);
-            let _r = self.provider.put_cf(index_handle, P_CACHE_PULLJOB.as_bytes(), serde_json::to_vec(&result).unwrap());          
+            pull_jobs.retain(|a| a != &id);
+            let _r = self.provider.put_cf(index_handle, P_CACHE_PULLJOB.as_bytes(), serde_json::to_vec(&pull_jobs).unwrap());          
         }
         
 
@@ -455,13 +504,13 @@ impl Persistence for RocksDBProvider {
         //return None;
         let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
         let index_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();
-        let result:Vec<String> = match self.provider.get_cf(index_handle, P_CACHE_PULLJOB.as_bytes()) {                
+        let pull_jobs:Vec<String> = match self.provider.get_cf(index_handle, P_CACHE_PULLJOB.as_bytes()) {                
             Ok(Some(value)) => serde_json::from_slice(&*value).unwrap(),
             Ok(None) => vec!(),
             Err(e) => {println!("operational problem encountered: {}", e);
            vec!()}
         };
-        let picked = if result.is_empty() { None } else { result.get(std::cmp::min(result.len()-1, 0 + offset))};
+        let picked = if pull_jobs.is_empty() { None } else { pull_jobs.get(std::cmp::min(pull_jobs.len()-1, 0 + offset))};
         if picked.is_none(){
             None
         } else {

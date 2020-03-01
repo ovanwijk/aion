@@ -27,7 +27,7 @@
             },
            
           
-            "args": ["./config.conf" , "--timewarp_"],
+            "args": ["./config.conf" , "--timewarp"],
             "cwd": "${workspaceFolder}"
         },
         {

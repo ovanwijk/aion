@@ -53,10 +53,12 @@ async fn iota_api_call_async(node:&str, data: String) ->  Result<String, surf::E
 }
 
 fn iota_api_call(node:&str, data: String) ->  Result<String, reqwest::Error>{
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30)).build().expect("Client builder to work");
     let res = client.post(node)
         .header("ContentType", "application/json")
-        .header("X-IOTA-API-Version", "1")
+        .header("X-IOTA-API-Version", "1")        
         .body(data)
         .send();
     if res.is_err() {

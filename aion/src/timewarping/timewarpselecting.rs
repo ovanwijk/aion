@@ -67,6 +67,7 @@ impl Actor for TimewarpSelecting {
             },
             Protocol::Ready => {
                 self.ready = true;
+                self.storage.set_generic_cache(crate::indexstorage::ALL_STARTED, b"true".to_vec());
                 self.receive_timer(ctx, sender);
             }
             //Protocol::TransactionConfirmed(__msg) => self.receive_transactionconfimation(ctx, __msg, sender),
@@ -250,6 +251,7 @@ impl TimewarpSelecting {
     fn actor(storage:Arc<dyn Persistence>) -> Self {
         let node = &SETTINGS.node_settings.iri_connection(); 
         let last_picked =  &storage.get_last_picked_tw();
+        storage.set_generic_cache(crate::indexstorage::ALL_STARTED, "false".as_bytes().to_vec());
         TimewarpSelecting {
             picked_timewarp: if last_picked.is_some() {
                 Some(last_picked.as_ref().unwrap().clone())
@@ -260,6 +262,8 @@ impl TimewarpSelecting {
             start_time: crate::now(),
             ready: false
         }
+        
+       
     }
     pub fn props(storage:Arc<dyn Persistence>) -> BoxActorProd<TimewarpSelecting> {
         Props::new_args(TimewarpSelecting::actor, storage)
