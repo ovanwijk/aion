@@ -23,7 +23,9 @@ pub struct CreateStorageReponse {
     pub start: String,
     pub pathway: crate::pathway::PathwayDescriptor,
     pub node: String,
-    pub endpoints: Vec<String>
+    pub endpoints: Vec<String>,
+    pub is_lifeline: bool,
+    pub dependant: String
 }
 
 impl CreateStorageReponse {
@@ -35,7 +37,9 @@ impl CreateStorageReponse {
           //  is_pinned: false,
             timestamp: crate::now(),
             metadata: String::default(),
-            pathway_index_splits: vec!()
+            pathway_index_splits: vec!(),
+            is_lifeline: self.is_lifeline.clone(),
+            dependant: self.dependant.clone()
         }
     }
 
@@ -48,7 +52,9 @@ impl Default for CreateStorageReponse {
             start: String::from(""),
             pathway: crate::pathway::PathwayDescriptor::new(),
             node: String::from(""),
-            endpoints: vec!()
+            endpoints: vec!(),
+            is_lifeline: false,
+            dependant: String::from("")  
         }
     }
 }
@@ -97,7 +103,9 @@ pub async fn connect_storage_object_fn(info: web::Json<CreateStorageReponse>, da
                     start: start,
                     pathway: pathway,
                     node: String::from(""),
-                    endpoints: info.endpoints.clone()
+                    endpoints: info.endpoints.clone(),
+                    is_lifeline: info.is_lifeline.clone(),
+                    dependant: info.dependant.clone()
                 }});
                 println!("Json took: {}", t.elapsed().as_millis());
 
@@ -150,10 +158,9 @@ pub async fn store_storage_object_fn(info: web::Json<CreateStorageReponse>, data
     let mut t = std::time::Instant::now();
     // let is_local_node = info.node == SETTINGS.node_settings.iri_connection();
     let node = if info.node == "" { SETTINGS.node_settings.iri_connection() } else { info.node.clone() };
-    //let mut iota = iota_client::Client::new(node); //TODO get from settings  
     let pin_descriptor = info.to_pin_descriptor();
     data.storage.store_pin_descriptor(pin_descriptor.clone());
-    let pulljob = pin_descriptor.to_pull_job(node);
+    let pulljob = pin_descriptor.to_pull_job(node);//TODO 
    // info!("Pulljob ID: ", )
     data.storage.add_pull_job(&pulljob);
     return Ok(HttpResponse::Ok()
@@ -236,7 +243,9 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
                     start: start,
                     pathway: pathway,
                     node: String::from(""),
-                    endpoints: info.hashes.clone()
+                    endpoints: info.hashes.clone(),
+                    is_lifeline: false,
+                    dependant: String::from("")
                 }});
                 println!("Json took: {}", t.elapsed().as_millis());
 

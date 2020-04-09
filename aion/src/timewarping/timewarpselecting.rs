@@ -251,7 +251,10 @@ impl TimewarpSelecting {
     fn actor(storage:Arc<dyn Persistence>) -> Self {
         let node = &SETTINGS.node_settings.iri_connection(); 
         let last_picked =  &storage.get_last_picked_tw();
-        storage.set_generic_cache(crate::indexstorage::ALL_STARTED, "false".as_bytes().to_vec());
+        let _r = storage.set_generic_cache(crate::indexstorage::ALL_STARTED, "false".as_bytes().to_vec());
+        if _r.is_err() {
+            info!("{}", _r.unwrap_err());
+        }
         TimewarpSelecting {
             picked_timewarp: if last_picked.is_some() {
                 Some(last_picked.as_ref().unwrap().clone())

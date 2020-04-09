@@ -33,12 +33,14 @@ pub const PIN_STATUS_AWAIT:&str = "await";
 pub const PIN_STATUS_IN_PROGRESS:&str = "in progress";
 pub const PIN_STATUS_NODE_ERROR:&str = "node error";
 pub const PIN_STATUS_PIN_ERROR:&str = "pinning error";
+pub const PIN_STATUS_TRANSACTION_NOT_FOUND:&str = "transaction not found error";
 
 //Persistent cache keys:
 pub const P_CACHE_LAST_LIFELIFE:&str = "LAST_LIFELINE";
 pub const P_CACHE_UNPINNED_LIFELIFE:&str = "UNPINNED_LIFELINE";
 pub const P_CACHE_PULLJOB:&str = "P_CACHE_PULLJOB";
 pub const P_CACHE_FAULTY_PULLJOB:&str = "P_CACHE_FAULTY_PULLJOB";
+pub const P_CACHE_LIFELINE_SUBGRAPH:&str = "P_CACHE_FAULTY_PULLJOB";
 
 /// Given a start and end timestamp returns a range of time-indexes.
 pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
@@ -168,6 +170,8 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     /// Gets the head of the lifeline.
     fn get_last_lifeline(&self) -> Option<LifeLineData>;
 
+    fn find_tx_distance_between_lifelines(&self, start: &String, end: &String) -> i64;
+
     fn save_timewarp_state(&self, state: TimewarpIssuingState);
     fn get_timewarp_state(&self) -> Option<TimewarpIssuingState>;
 
@@ -246,6 +250,10 @@ pub fn empty() -> String{
     String::new()
 }
 
+pub fn default_false() -> bool{
+   false
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LifeLineData {
     pub timewarp_tx: String,    
@@ -290,7 +298,9 @@ pub struct PinDescriptor {
     pub pathway: PathwayDescriptor,
     pub endpoints: Vec<String>,
     pub pathway_index_splits: Vec<isize>,    
-    pub metadata: String
+    pub metadata: String,
+    pub is_lifeline: bool,
+    pub dependant: String
 }
 
 impl PinDescriptor {
@@ -308,7 +318,9 @@ impl PinDescriptor {
             node: node.clone(),
             pathway: self.pathway.clone(),
             validity_pre_check_tx: vec!(),
-            status: PIN_STATUS_AWAIT.to_string()
+            status: PIN_STATUS_AWAIT.to_string(),
+            is_lifeline: self.is_lifeline.clone(),
+            dependant: self.dependant.clone()
         }
     }
 }
@@ -331,7 +343,14 @@ pub struct PullJob {
     pub current_index: usize,
     pub history: Vec<String>,
     pub validity_pre_check_tx: Vec<String>,
-    pub pathway: PathwayDescriptor
+    pub pathway: PathwayDescriptor,
+
+    #[serde(default = "default_false")]    
+    pub is_lifeline: bool,
+    #[serde(default = "empty")]
+    pub dependant: String,
+    
+
 }
 
 impl PullJob {

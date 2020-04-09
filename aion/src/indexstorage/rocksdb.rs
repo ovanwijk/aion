@@ -347,6 +347,18 @@ impl Persistence for RocksDBProvider {
     fn prepend_to_lifeline(&self, ll_data: Vec<LifeLineData>) -> Result<(), String> {
         Ok(())
     }
+    //TODO implement
+    fn find_tx_distance_between_lifelines(&self, start: &String, end: &String) -> i64 {
+        let start_tx = self.get_lifeline_tx(start);
+        let end_tx = self.get_lifeline_tx(end);
+        match (start_tx, end_tx) {
+            (None, _) => -1,
+            (_, None) => -1,
+            (Some(st),Some(en)) => {                
+                0
+            }
+        }
+    }
 
     
     /// This function assumes the first data-point to be the 'oldest'
@@ -510,16 +522,26 @@ impl Persistence for RocksDBProvider {
             Err(e) => {println!("operational problem encountered: {}", e);
            vec!()}
         };
-        let picked = if pull_jobs.is_empty() { None } else { pull_jobs.get(std::cmp::min(pull_jobs.len()-1, 0 + offset))};
+        let mut picked:Option<String> = if pull_jobs.is_empty() { None } else { Some(pull_jobs.get(std::cmp::min(pull_jobs.len()-1, 0 + offset)).unwrap().clone()) };
         if picked.is_none(){
             None
         } else {
-            match self.provider.get_cf(handle, picked.unwrap().as_bytes()) {
-                Ok(Some(value)) => Some(serde_json::from_slice(&*value).unwrap()),
-                Ok(None) => None,
-                Err(e) => {println!("operational problem encountered: {}", e);
-               None}
-            }
+            let mut to_return: Option<PullJob> = None;
+            loop{
+                to_return = match self.provider.get_cf(handle, picked.unwrap().as_bytes()) {
+                    Ok(Some(value)) => Some(serde_json::from_slice(&*value).unwrap()),
+                    Ok(None) => return None,
+                    Err(e) => {println!("operational problem encountered: {}", e); return None}
+                };
+                let unwarpped = to_return.unwrap();
+                if self.provider.get_cf(handle, unwarpped.dependant.as_bytes()).unwrap().is_none() {
+                    return Some(unwarpped);
+                }else {
+                    let borrowed = unwarpped.dependant.clone();
+                    picked = Some(borrowed);
+                }
+                
+            };
         }
      }
 
