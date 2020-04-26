@@ -159,7 +159,7 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     fn add_to_lifeline(&self, ll_data:Vec<LifeLineData>) -> Result<(), String>;
     /// Prepends to the known lifeline. The transaction ID of the split + connecting transactions will be added to the
     /// lifeline dataset with a postfix of '_N' where N should mostly be 1 and in rare occations more then 1.
-    fn prepend_to_lifeline(&self, ll_data:Vec<LifeLineData>) -> Result<(), String>;
+    fn prepend_to_lifeline(&self, ll_data:LifeLineData) -> Result<(), String>;
     /// Get lifeline data given en time-index key
     fn get_lifeline(&self, key:&i64) -> Vec<String>;
     /// Gets the closest lifeline transactions to the given timestamp.
@@ -253,6 +253,9 @@ pub fn empty() -> String{
 pub fn default_false() -> bool{
    false
 }
+pub fn default_none<T>() -> Option<T>{
+    None
+ }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LifeLineData {
@@ -268,6 +271,27 @@ pub struct LifeLineData {
     pub connecting_pathway: Option<PathwayDescriptor>,
     pub connecting_timestamp: Option<i64>,
     pub connecting_timewarp: Option<String>
+}
+
+impl LifeLineData {
+    pub fn connecting_empty_ll_data(&self) -> Option<LifeLineData> {
+        if self.connecting_timewarp.is_none() {
+            return None;
+        }
+        Some(LifeLineData {
+            timewarp_tx: self.connecting_timewarp.clone().unwrap(),
+            trunk_or_branch: self.trunk_or_branch.clone(),
+            timestamp: self.connecting_timestamp.clone().unwrap(),
+            transactions_till_oldest: self.transactions_till_oldest - 1,
+            oldest_tx: self.oldest_tx.clone(),   
+            timewarp_id: self.timewarp_id.clone(),
+            oldest_timestamp: self.oldest_timestamp.clone(),
+            unpinned_connecting_txs: vec!(), 
+            connecting_pathway: None,
+            connecting_timestamp: None,
+            connecting_timewarp: None
+        })
+    }
 }
 
 impl Default for LifeLineData {
@@ -299,8 +323,11 @@ pub struct PinDescriptor {
     pub endpoints: Vec<String>,
     pub pathway_index_splits: Vec<isize>,    
     pub metadata: String,
-    pub is_lifeline: bool,
-    pub dependant: String
+    
+    pub dependant: String,
+    pub lifeline_component: Option<PullJobLifeline>
+    
+
 }
 
 impl PinDescriptor {
@@ -319,8 +346,9 @@ impl PinDescriptor {
             pathway: self.pathway.clone(),
             validity_pre_check_tx: vec!(),
             status: PIN_STATUS_AWAIT.to_string(),
-            is_lifeline: self.is_lifeline.clone(),
-            dependant: self.dependant.clone()
+            lifeline_component: self.lifeline_component.clone(),
+            dependant: self.dependant.clone(),
+           
         }
     }
 }
@@ -334,6 +362,15 @@ pub struct AwaitPinning {
 
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PullJobLifeline {
+    pub lifeline_end_tx: Option<String>,
+    pub lifeline_end_ts: Option<i64>,   
+    pub lifeline_transitions: HashMap<i64, i64>, //First is the start index, second is the count. [3, 100]    
+    pub lifeline_prev: Option<(String, i64, String)>, //when walking a lifeline transition keep the orginal tx. TX, TS, TAG
+    pub lifeline_prev_index: Option<i64> // only set when walking a longer distance.
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PullJob {
     pub id: String,
     pub node: String,
@@ -342,16 +379,16 @@ pub struct PullJob {
     pub current_tx: String,
     pub current_index: usize,
     pub history: Vec<String>,
-    pub validity_pre_check_tx: Vec<String>,
+    pub validity_pre_check_tx: Vec<String>,    
     pub pathway: PathwayDescriptor,
-
-    #[serde(default = "default_false")]    
-    pub is_lifeline: bool,
     #[serde(default = "empty")]
     pub dependant: String,
-    
-
+    #[serde(default = "default_none")]
+    pub lifeline_component: Option<PullJobLifeline>
+   
 }
+
+
 
 impl PullJob {
     pub fn max_steps(&self) -> usize {

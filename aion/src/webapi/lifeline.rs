@@ -7,15 +7,33 @@ use actix_web::{
 use crate::APIActors;
 use crate::SETTINGS;
 use crate::webapi::ReturnData;
+use serde::{Serialize, Deserialize};
 
-struct LifelineSyncRequest {
-    
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LifelineSyncRequest {
+    start: String,
+    end: String,
 }
 
-
-#[post("/lifeline/connect")]
-pub async fn lifelineConnectF(data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
+#[post("/lifeline/create_pull_request")]
+pub async fn lifelineConnectF(info: web::Json<LifelineSyncRequest>, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
     //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
+    let st = data.storage.clone();
+    let start_tx = st.get_lifeline_tx(&info.start);
+    let end_tx = st.get_lifeline_tx(&info.end);
+    if start_tx.is_none() && end_tx.is_none() {
+        return Ok(HttpResponse::NotFound()
+        .content_type("application/json")
+        .body("{\"status\":\"Start or end transaction is not a known lifeline transaction.\"}"));
+    }
+    let un_start = start_tx.unwrap();
+    let un_end = end_tx.unwrap();
+    if un_start.timestamp >= un_end.timestamp {
+        return Ok(HttpResponse::NotFound()
+        .content_type("application/json")
+        .body("{\"status\":\"End must be older that start.\"}"));
+    }
     let r = data.storage.get_last_lifeline();
     Ok(HttpResponse::Ok()
     .content_type("application/json")

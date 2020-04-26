@@ -72,12 +72,20 @@ pub struct AppSettings {
     timewarp_index_settings: TimewarpIndexSettings,
     cache_settings: CacheSettings,
     timewarp_issuing_settings: TimewarpIssuingSettings,
-    api_settings: APISettings
+    api_settings: APISettings,
+    lifeline_settings: LifelineSettings
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct APISettings {
     binding: String
+}
+
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct LifelineSettings {
+    subgraph_section_split_in_seconds: i64,
+    enable_hooks: bool
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -151,6 +159,10 @@ lazy_static! {
         unsafe{
             let lconfig = HOCON_CONFIG.clone().unwrap();
             AppSettings {
+                lifeline_settings: LifelineSettings {
+                    enable_hooks: lconfig["lifeline"]["enable_hooks"].as_bool().unwrap(),
+                    subgraph_section_split_in_seconds: lconfig["lifeline"]["subgraph_section_split_in_seconds"].as_i64().unwrap(),
+                },
                 node_settings: NodeSettings {
                     iri_host: lconfig["nodes"]["iri_api_host"].as_string().unwrap(),
                     iri_port: lconfig["nodes"]["iri_api_port"].as_i64().unwrap() as usize,

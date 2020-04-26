@@ -37,8 +37,14 @@ impl TimewarpTX for iota_lib_rs::iota_model::Transaction {
     }
 }
 
-pub fn get_trunk_and_branch(trytes:&str) -> (String, String) {
-    (trytes[2430..2511].into(), trytes[2511..2592].into())
+pub fn get_trunk_branch_ts_tag(trytes:&str) -> (String, String, i64, String) {
+    let transaction_trits = trytes.trits();
+    let attachment = iota_conversion::long_value(&transaction_trits[7857..7884]) / 1000;
+    (trytes[2430..2511].into(), 
+        trytes[2511..2592].into(),
+        if attachment == 0 {iota_conversion::long_value(&transaction_trits[6966..6993])}else{
+            attachment},
+        trytes[2592..2619].into())
 }
 
 pub fn parse_tx_trytes(trytes:&str, hash:&str) -> iota_lib_rs::iota_model::Transaction {

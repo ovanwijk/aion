@@ -344,7 +344,39 @@ impl Persistence for RocksDBProvider {
     }
 
     //TODO implement
-    fn prepend_to_lifeline(&self, ll_data: Vec<LifeLineData>) -> Result<(), String> {
+    fn prepend_to_lifeline(&self, ll_data: LifeLineData) -> Result<(), String> {
+        let _r = self.get_lifeline_tx(&ll_data.timewarp_tx);
+        if _r.is_none() && ll_data.connecting_timewarp.is_none() {
+            return Err(String::from("Referncing transaction is not a lifeline transaction or the first lifeline data is not the referencing transaction."));
+        }
+        let mut previous_ll = _r.unwrap();
+        let handle = self.provider.cf_handle(LIFELINE_INDEX_COLUMN).unwrap();
+        let range_handle = self.provider.cf_handle(LIFELINE_INDEX_RANGE_COLUMN).unwrap();
+        let mut batch = WriteBatch::default();
+        let mut current_time_key = get_time_key(&ll_data.timestamp);
+        let mut current_ll_time_index = match self.provider.get_cf(range_handle, current_time_key.to_be_bytes()) {
+            Ok(Some(value)) => {
+                let res: Vec<String> = serde_json::from_slice(&*value).unwrap();
+                res
+            },
+            Ok(None) => vec!(),
+            Err(e) => {println!("operational problem encountered: {}", e);
+            vec!()}
+        };
+
+        current_ll_time_index.insert(0, ll_data.connecting_timewarp.clone().unwrap());
+        
+        //TODO handle errors
+        batch.put(ll_data.connecting_timewarp.clone().unwrap().as_bytes(), serde_json::to_vec(&ll_data.connecting_empty_ll_data()).unwrap());
+        batch.put(current_time_key.to_be_bytes(), serde_json::to_vec(&current_ll_time_index).unwrap());
+        batch.put(ll_data.timewarp_tx.clone().as_bytes(), serde_json::to_vec(&ll_data).unwrap());
+        
+        let _l = self.provider.write(batch);
+       
+        if _l.is_err() {
+            return Err(format!("Something went wrong pre-pending lifeline: {}", _l.unwrap_err().to_string()))
+        }
+        
         Ok(())
     }
     //TODO implement

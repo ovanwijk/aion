@@ -73,14 +73,14 @@ impl PathwayDescriptor {
         }
     }
 
-    // pub fn from_vec(v:Vec<u8>) -> PathwayDescriptor {
-    //     PathwayDescriptor {
-    //         size: v.len() * STEPS_PER_FIELD,
-    //         fields: Box::new(v),
-    //         tx_count:0
-    //     }
-    // }
-
+    pub fn slice(&self, start: usize, end: usize) -> PathwayDescriptor {
+        let mut result = PathwayDescriptor::new();
+        for a in start..end {
+            result.add_to_path(self.get_at_index(a).expect("the index to within the bounds"));
+        }
+        result
+    }
+    
     pub fn format(&self) -> String {
         let mut result = String::from("");
         for f in self.fields.clone().into_iter() {

@@ -7,10 +7,11 @@ use actix_web::{
 use crate::APIActors;
 use crate::SETTINGS;
 use crate::webapi::ReturnData;
-use crate::indexstorage::{PullJob, PinDescriptor};
+use crate::indexstorage::{PullJobLifeline, PinDescriptor};
 use iota_lib_rs::prelude::*;
 use iota_model::Transaction;
 use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
 extern crate base64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -23,9 +24,9 @@ pub struct CreateStorageReponse {
     pub start: String,
     pub pathway: crate::pathway::PathwayDescriptor,
     pub node: String,
-    pub endpoints: Vec<String>,
-    pub is_lifeline: bool,
+    pub endpoints: Vec<String>,  
     pub dependant: String
+  
 }
 
 impl CreateStorageReponse {
@@ -38,8 +39,9 @@ impl CreateStorageReponse {
             timestamp: crate::now(),
             metadata: String::default(),
             pathway_index_splits: vec!(),
-            is_lifeline: self.is_lifeline.clone(),
-            dependant: self.dependant.clone()
+          
+            dependant: self.dependant.clone(),
+            lifeline_component: None,
         }
     }
 
@@ -53,8 +55,7 @@ impl Default for CreateStorageReponse {
             pathway: crate::pathway::PathwayDescriptor::new(),
             node: String::from(""),
             endpoints: vec!(),
-            is_lifeline: false,
-            dependant: String::from("")  
+            dependant: String::from("")
         }
     }
 }
@@ -104,8 +105,7 @@ pub async fn connect_storage_object_fn(info: web::Json<CreateStorageReponse>, da
                     pathway: pathway,
                     node: String::from(""),
                     endpoints: info.endpoints.clone(),
-                    is_lifeline: info.is_lifeline.clone(),
-                    dependant: info.dependant.clone()
+                    dependant: info.dependant.clone(),
                 }});
                 println!("Json took: {}", t.elapsed().as_millis());
 
@@ -244,8 +244,7 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
                     pathway: pathway,
                     node: String::from(""),
                     endpoints: info.hashes.clone(),
-                    is_lifeline: false,
-                    dependant: String::from("")
+                    dependant: String::from(""),
                 }});
                 println!("Json took: {}", t.elapsed().as_millis());
 
