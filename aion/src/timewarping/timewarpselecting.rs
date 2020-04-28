@@ -154,7 +154,7 @@ impl TimewarpSelecting {
                 }
             }
             // We reverse because pulling the timewarp is from present to past. 
-            // and we need to pull
+            // and we need to append from past to present
             let mut lifelines:Vec<LifeLineData> = vec!();
             for connecting_timewarp in timewarps.iter().rev() {
                 let mut skip = false;

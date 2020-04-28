@@ -41,14 +41,11 @@ pub struct GraphEdge {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LifelineSubGraph {
-    pub current_latest: String,
     pub top_level_txcount_cutoff:i64,
     pub lastest_and_top_connected: bool,
     pub top_level: String,
     pub current_index: i64,
-    pub vertices: HashMap<String, GraphVertex>,
-
-  
+    pub vertices: HashMap<String, GraphVertex>  
 }
 
 impl LifelineSubGraph {
@@ -136,6 +133,24 @@ impl LifelineSubGraph {
         self.store_state(event, storage.clone());
 
         to_return
+    }
+
+
+    pub fn load(storage:Arc<dyn Persistence>) -> Result<LifelineSubGraph, String>  {
+        let _r = storage.get_generic_cache(crate::indexstorage::P_CACHE_LIFELINE_SUBGRAPH);
+        if _r.is_none() {
+            return Ok(LifelineSubGraph {
+                top_level_txcount_cutoff: 0,
+                top_level: String::from(""),
+                current_index: -1,
+                lastest_and_top_connected: false,
+                vertices: HashMap::new()
+            } );
+        }
+        let result:LifelineSubGraph = serde_json::from_slice(&_r.unwrap()).expect("Lifeline data to be correct");
+        return Ok(result);
+
+
     }
 
 }

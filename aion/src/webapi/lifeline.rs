@@ -22,7 +22,7 @@ pub async fn lifelineConnectF(info: web::Json<LifelineSyncRequest>, data: web::D
     let st = data.storage.clone();
     let start_tx = st.get_lifeline_tx(&info.start);
     let end_tx = st.get_lifeline_tx(&info.end);
-    if start_tx.is_none() && end_tx.is_none() {
+    if start_tx.is_none() || end_tx.is_none() {
         return Ok(HttpResponse::NotFound()
         .content_type("application/json")
         .body("{\"status\":\"Start or end transaction is not a known lifeline transaction.\"}"));

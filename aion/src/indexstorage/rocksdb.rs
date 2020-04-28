@@ -119,16 +119,18 @@ impl Persistence for RocksDBProvider {
         }
     }
 
-    fn get_lifeline(&self, key: &i64) -> Vec<String> {
+    fn get_lifeline(&self, key: &i64) -> Vec<(String, i64)> {
         let handle = self.provider.cf_handle(LIFELINE_INDEX_RANGE_COLUMN).unwrap();   
-        let to_return:Option<Vec<String>> = match self.provider.get_cf(handle,  key.to_be_bytes()) {                
+        let to_return:Option<Vec<(String, i64)>> = match self.provider.get_cf(handle,  key.to_be_bytes()) {                
                 Ok(Some(value)) => Some(serde_json::from_slice(&*value).expect("get_lifeline_tx")),
                 Ok(None) => None,
                 Err(e) => {println!("operational problem encountered: {}", e);
                 None}
         };
         if to_return.is_some() {
-            to_return.unwrap()
+            let mut sorted = to_return.unwrap();
+            sorted.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            sorted
         }else{
             vec!()
         }
@@ -143,10 +145,9 @@ impl Persistence for RocksDBProvider {
         let mut found: Option<LifeLineData> = None;
         while counter < 15 && found.is_none() {
             let it = self.get_lifeline(&(timewindow_key + (SETTINGS.timewarp_index_settings.time_index_clustering_in_seconds * counter)));
-            for ll_tx in it  {
-                let lifeline = self.get_lifeline_tx(&ll_tx).unwrap();
-                if lifeline.timestamp > *timestamp {
-                    found = Some(lifeline.clone());
+            for ll_tx in it  {                
+                if ll_tx.1 > *timestamp {                  
+                    found = Some(self.get_lifeline_tx(&ll_tx.0).unwrap());
                     break;
                 }
             }
@@ -354,17 +355,9 @@ impl Persistence for RocksDBProvider {
         let range_handle = self.provider.cf_handle(LIFELINE_INDEX_RANGE_COLUMN).unwrap();
         let mut batch = WriteBatch::default();
         let mut current_time_key = get_time_key(&ll_data.timestamp);
-        let mut current_ll_time_index = match self.provider.get_cf(range_handle, current_time_key.to_be_bytes()) {
-            Ok(Some(value)) => {
-                let res: Vec<String> = serde_json::from_slice(&*value).unwrap();
-                res
-            },
-            Ok(None) => vec!(),
-            Err(e) => {println!("operational problem encountered: {}", e);
-            vec!()}
-        };
+        let mut current_ll_time_index =self.get_lifeline(&current_time_key);
 
-        current_ll_time_index.insert(0, ll_data.connecting_timewarp.clone().unwrap());
+        current_ll_time_index.insert(0, (ll_data.connecting_timewarp.clone().unwrap(), ll_data.connecting_timestamp.clone().unwrap()));
         
         //TODO handle errors
         batch.put(ll_data.connecting_timewarp.clone().unwrap().as_bytes(), serde_json::to_vec(&ll_data.connecting_empty_ll_data()).unwrap());
@@ -394,30 +387,52 @@ impl Persistence for RocksDBProvider {
 
     
     /// This function assumes the first data-point to be the 'oldest'
+    /// Uses the 
     fn add_to_lifeline(&self, lifeline_data: Vec<LifeLineData>) -> Result<(), String> {
         let handle = self.provider.cf_handle(LIFELINE_INDEX_COLUMN).unwrap();
         let range_handle = self.provider.cf_handle(LIFELINE_INDEX_RANGE_COLUMN).unwrap();
         
         let mut batch = WriteBatch::default();
         let mut unpinned: Vec<String> = vec!();
+
+        let mut ll_graph_events: Vec<GraphEntryEvent> = vec!();
         
         let mut last_lifeline = if lifeline_data.first().unwrap().connecting_timewarp.is_some() {                
             self.get_lifeline_tx(&lifeline_data.first().unwrap().connecting_timewarp.as_ref().unwrap().to_string())
         }else {
             None
         };
+        let mut oldest_tx_ts_cnt: (String, i64, i64) = (String::from(""), 0, 0);
+       
         for lifeline in lifeline_data {            
             if last_lifeline.is_some() {
-                let unwrapped_last_ll = last_lifeline.unwrap();
+                let mut unwrapped_last_ll = last_lifeline.unwrap();
                 if &unwrapped_last_ll.timestamp > &lifeline.timestamp {
                     return Err("Given timewarp is older then the one provided".to_string());
                 }
+               
+                oldest_tx_ts_cnt = (unwrapped_last_ll.oldest_tx.clone(), 
+                    unwrapped_last_ll.oldest_timestamp.clone(), 
+                    unwrapped_last_ll.transactions_till_oldest.clone() + (if unwrapped_last_ll.connecting_pathway.is_none() { 1 }else {
+                        unwrapped_last_ll.connecting_pathway.clone().unwrap().size as i64
+                    } ));
+                unwrapped_last_ll.transactions_till_oldest = oldest_tx_ts_cnt.2;
+                unwrapped_last_ll = if unwrapped_last_ll.timestamp - oldest_tx_ts_cnt.1 > SETTINGS.lifeline_settings.subgraph_section_split_in_seconds {
+                    // TODO Call lifeline adjustment, create new event
+                    oldest_tx_ts_cnt = (unwrapped_last_ll.timewarp_tx.clone(), unwrapped_last_ll.timestamp.clone(), 0);
+                    LifeLineData{                       
+                        oldest_tx: oldest_tx_ts_cnt.0,
+                        oldest_timestamp: oldest_tx_ts_cnt.1,
+                        ..unwrapped_last_ll
+                    }
+                }else { unwrapped_last_ll };
                 if &unwrapped_last_ll.timewarp_tx == lifeline.connecting_timewarp.as_ref().expect("Connecting lifeline data") {
+                    
                     for time_key in get_time_key_range(&unwrapped_last_ll.timestamp, &lifeline.timestamp ) {
                         unpinned.push(lifeline.timewarp_tx.clone());
                         let _1 = &batch.put_cf(handle, &lifeline.timewarp_tx.as_bytes(), serde_json::to_vec(&lifeline).unwrap());
                         let mut range_map = self.get_lifeline(&time_key);
-                        range_map.push(lifeline.timewarp_tx.clone());
+                        range_map.push((lifeline.timewarp_tx.clone(), lifeline.timestamp.clone()));
                         let _2 = &batch.put_cf(range_handle, time_key.to_be_bytes(),serde_json::to_vec(&range_map).unwrap());                        
                     }                   
                 } else {
@@ -425,10 +440,11 @@ impl Persistence for RocksDBProvider {
                 }
             } else {
                 info!("Life line initialisation");
+                // TODO create event 0;
                 unpinned.push(lifeline.timewarp_tx.clone());
                 let _l = &batch.put_cf(handle, lifeline.timewarp_tx.as_bytes(), serde_json::to_vec(&lifeline).unwrap());                
                 let mut range_map = self.get_lifeline(&get_time_key(&lifeline.timestamp));
-                range_map.push(lifeline.timewarp_tx.clone());
+                range_map.push((lifeline.timewarp_tx.clone(), lifeline.timestamp.clone()));
                 let _2 = &batch.put_cf(range_handle, get_time_key(&lifeline.timestamp).to_be_bytes(),serde_json::to_vec(&range_map).unwrap());    
                     
                 //cache_updates.insert(get_time_key(&timewarp.timestamp), range_map);

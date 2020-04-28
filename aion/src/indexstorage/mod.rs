@@ -161,7 +161,7 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     /// lifeline dataset with a postfix of '_N' where N should mostly be 1 and in rare occations more then 1.
     fn prepend_to_lifeline(&self, ll_data:LifeLineData) -> Result<(), String>;
     /// Get lifeline data given en time-index key
-    fn get_lifeline(&self, key:&i64) -> Vec<String>;
+    fn get_lifeline(&self, key:&i64) -> Vec<(String, i64)>;
     /// Gets the closest lifeline transactions to the given timestamp.
     fn get_lifeline_ts(&self, timestamp:&i64) -> Option<LifeLineData>;
     /// Gets a specific lifeline data point given the transaction ID. Note that this might sometimes be post-fixed with '_N'
