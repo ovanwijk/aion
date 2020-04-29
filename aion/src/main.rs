@@ -37,7 +37,7 @@ use riker::actors::*;
 use hocon::HoconLoader;
 use std::*;
 use std::sync::Arc;
-use indexstorage::rocksdb::RocksDBProvider;
+use indexstorage::rocksdb_impl::RocksDBProvider;
 use indexstorage::{Persistence};
 use timewarping::zmqlistener::*;
 use timewarping::timewarpindexing::*;
@@ -208,7 +208,6 @@ lazy_static! {
 
 pub struct APIActors {
     storage: Arc<dyn Persistence>,
-    lifeline_subgraph: Arc<LifelineSubGraph>,
     actor_system: Arc<ActorSystem>,
     tw_selecting: riker::actor::ActorRef<timewarping::Protocol>
 }
@@ -331,13 +330,13 @@ async fn main() -> io::Result<()> {
         io::stdin().read_line(&mut String::new()).unwrap();
     }
     let arc_system = Arc::new(sys);
-    let ll_subgraph = Arc::new(LifelineSubGraph::load(storage.clone()).unwrap());
+    //let ll_subgraph = Arc::new(LifelineSubGraph::load(storage.clone()).unwrap());
 
 
     HttpServer::new(
         move || App::new().data(APIActors {
             storage: storage.clone(),
-            lifeline_subgraph: ll_subgraph.clone(),
+           // lifeline_subgraph: ll_subgraph.clone(),
             actor_system: arc_system.clone(),
             tw_selecting: tw_selection_actor.clone()
         })

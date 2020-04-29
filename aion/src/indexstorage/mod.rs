@@ -3,7 +3,7 @@ use crate::SETTINGS;
 use serde::{Serialize, Deserialize};
 use crate::timewarping::signing::*;
 use sha2::{Sha256, Digest};
-pub mod rocksdb;
+pub mod rocksdb_impl;
 use std::sync::Arc;
 use crate::pathway::PathwayDescriptor;
 extern crate base64;
@@ -108,27 +108,14 @@ pub fn get_lastest_known_timewarps(st: Arc<dyn Persistence>) -> Vec<TimewarpData
     to_return
 }
 
-/// Persistence trait described all local persistence functions required for AION.
-/// There are multiple domains described here:
-/// 
-/// tw_detection: Relates to all information that is being stored in order to detect
-/// possible timewarps.
-/// 
-/// last picked timewarps: this domain describes timewarps are that are 'followed' and detected
-/// this is the basis to select a lifeline on.
-/// 
-/// Lifeline: a collection of selected timewarps and connecting transaction ID's that are being pinned
-/// on the managed IOTA node.
-/// 
-/// Timewarp-state: All data related to issuing your own timewarps.
-/// 
-/// Pull jobs: These are persisted jobs that are pulling data from other nodes.
-pub trait Persistence: Send + Sync + std::fmt::Debug {
 
-    ///cleans all tracking of timewarps and indexes up till the timewarp
-    fn clean_db(&self, timestamp:i64);
-    
+pub trait CleanDB:  Send + Sync + std::fmt::Debug {
+  ///cleans all tracking of timewarps and indexes up till the timewarp
+  fn clean_db(&self, timestamp:i64);
+}
 
+
+pub trait TimewarpDetectionPersistence: Send + Sync + std::fmt::Debug {
     /// Adds values to a time-index key-block.
     fn tw_detection_add_to_index(&self, key:i64, values:Vec<(String, String)>);
     /// Removes values from a time-index key-block
@@ -150,7 +137,16 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     /// Returnes the latest kown followed timewarp.
     fn get_last_picked_tw(&self) -> Option<TimewarpSelectionState>;
     fn set_last_picked_tw(&self,  state: TimewarpSelectionState) -> Result<(), String>;
+}
 
+pub trait GenericCachePersistence: Send + Sync + std::fmt::Debug {
+
+    fn set_generic_cache(&self,key:&str, value:Vec<u8>) -> Result<(), String>;
+    fn get_generic_cache(&self,key:&str) -> Option<Vec<u8>>;
+
+}
+
+pub trait LifelinePersistence: Send + Sync + std::fmt::Debug {
     /// When adding transactions to the lifeline there might be a path of hundreds of transactions that require pinning
     /// Therefore lifeline pinning is asynchronous. This function gets lifeline data that still requires pinning.
     fn get_unpinned_lifeline(&self) -> Vec<String>;
@@ -171,10 +167,10 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     fn get_last_lifeline(&self) -> Option<LifeLineData>;
 
     fn find_tx_distance_between_lifelines(&self, start: &String, end: &String) -> i64;
+}
 
-    fn save_timewarp_state(&self, state: TimewarpIssuingState);
-    fn get_timewarp_state(&self) -> Option<TimewarpIssuingState>;
 
+pub trait PullJobsPersistence {
     fn store_pin_descriptor(&self, pin_descriptor:PinDescriptor) -> Result<(), String>;
     fn get_pin_descriptor(&self, id:Vec<u8>) -> Option<PinDescriptor>;
 
@@ -185,10 +181,36 @@ pub trait Persistence: Send + Sync + std::fmt::Debug {
     fn next_pull_job(&self, offset:&usize) -> Option<PullJob>;
     fn list_pull_jobs(&self) -> Vec<String>;
     fn list_faulty_pull_jobs(&self) -> Vec<String>;
-   
+}
 
-    fn set_generic_cache(&self,key:&str, value:Vec<u8>) -> Result<(), String>;
-    fn get_generic_cache(&self,key:&str) -> Option<Vec<u8>>;
+pub trait TimewarpIssueingPersistence {
+
+    fn save_timewarp_state(&self, state: TimewarpIssuingState);
+    fn get_timewarp_state(&self) -> Option<TimewarpIssuingState>;
+
+}
+
+
+/// Persistence trait described all local persistence functions required for AION.
+/// There are multiple domains described here:
+/// 
+/// tw_detection: Relates to all information that is being stored in order to detect
+/// possible timewarps.
+/// 
+/// last picked timewarps: this domain describes timewarps are that are 'followed' and detected
+/// this is the basis to select a lifeline on.
+/// 
+/// Lifeline: a collection of selected timewarps and connecting transaction ID's that are being pinned
+/// on the managed IOTA node.
+/// 
+/// Timewarp-state: All data related to issuing your own timewarps.
+/// 
+/// Pull jobs: These are persisted jobs that are pulling data from other nodes.
+pub trait Persistence: Send + Sync + std::fmt::Debug + 
+    CleanDB + TimewarpDetectionPersistence + GenericCachePersistence + 
+    LifelinePersistence + PullJobsPersistence + TimewarpIssueingPersistence  {
+
+
 }
 
 
