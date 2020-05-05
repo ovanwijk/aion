@@ -48,7 +48,7 @@ impl PullJobsPersistence for RocksDBProvider {
      fn update_pull_job(&self, job:&PullJob) {
         let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
         let _r = self.provider.put_cf(handle, job.id.as_bytes(), serde_json::to_vec(&job).unwrap());
-        if job.status.as_str() == PIN_STATUS_PIN_ERROR || job.status.as_str() == PIN_STATUS_NODE_ERROR {
+        if  PIN_STATUS_ERROR.contains(&job.status.as_str()) {
 
             //Add to faulty list
             let mut failed_pull_jobs:Vec<String> = match self.get_generic_cache(P_CACHE_FAULTY_PULLJOB) {                

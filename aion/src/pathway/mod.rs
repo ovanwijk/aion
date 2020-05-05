@@ -38,6 +38,28 @@ impl PathwayDescriptor {
 
     // }
 
+    pub fn trunk() -> PathwayDescriptor {
+        let mut t = PathwayDescriptor {
+            size: 0,
+            tx_count: 0,
+            fields: Box::new(vec!())
+        };
+        t.add_to_path(_T);
+        t.add_to_path(_E);
+        return t;
+    }
+
+    pub fn branch() -> PathwayDescriptor {
+        let mut t = PathwayDescriptor {
+            size: 0,
+            tx_count: 0,
+            fields: Box::new(vec!())
+        };
+        t.add_to_path(_B);
+        t.add_to_path(_E);
+        return t;
+    }
+
     pub fn new() -> PathwayDescriptor {
         PathwayDescriptor {
             size: 0,

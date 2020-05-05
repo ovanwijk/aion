@@ -17,6 +17,7 @@ use crate::indexstorage::*;
 use crate::aionmodel::transaction::get_trunk_branch_ts_tag;
 use crate::timewarping::Protocol;
 use crate::timewarping::WebRequestType;
+use crate::aionmodel::lifeline_subgraph::GraphEntryEvent;
 // use crate::timewarping::Timewarp;
 // use crate::timewarping::signing;
 // use crate::timewarping::timewarpwalker::*;
@@ -168,17 +169,22 @@ impl TransactionPulling {
                                                     let end_index = ll_comp.lifeline_transitions.get(&start_index).unwrap();
                                                     if end_index.clone() as usize == unwrapped_job.current_index {
                                                         ll_results.push(LifeLineData{
+                                                            prepends: vec!(), //TODO add here
                                                             timewarp_tx: prev.0.clone(),
                                                             trunk_or_branch: if step == crate::pathway::_T {true} else {false},
                                                             timestamp: prev.1.clone(),
-                                                            transactions_till_oldest: 0,// TODO fix somehow
-                                                            oldest_tx: ll_comp.lifeline_end_tx.clone().unwrap(),   
                                                             timewarp_id: prev.2.clone()[0..9].to_string(),
-                                                            oldest_timestamp: ll_comp.lifeline_end_ts.clone().unwrap(),
                                                             unpinned_connecting_txs: vec!(), 
-                                                            connecting_pathway: Some(unwrapped_job.pathway.slice(start_index as usize, *end_index as usize)),
-                                                            connecting_timestamp: Some(t_b_ts_tag.2.clone()),
-                                                            connecting_timewarp: Some(unwrapped_job.current_tx.clone())
+                                                                pathdata: LifeLinePathData {
+                                                                transactions_till_oldest: 0,// TODO fix somehow
+                                                                oldest_tx: ll_comp.lifeline_end_tx.clone(),   
+                                                                
+                                                                oldest_timestamp: ll_comp.lifeline_end_ts.clone(),
+                                                            
+                                                                connecting_pathway: Some(unwrapped_job.pathway.slice(start_index as usize, *end_index as usize)),
+                                                                connecting_timestamp: Some(t_b_ts_tag.2.clone()),
+                                                                connecting_timewarp: Some(unwrapped_job.current_tx.clone())
+                                                            }
                                                         });
                                                         if ll_comp.lifeline_transitions.contains_key(&(unwrapped_job.current_index as i64)) {
                                                             ll_comp.lifeline_prev_index = Some(unwrapped_job.current_index.clone() as i64);
@@ -192,16 +198,20 @@ impl TransactionPulling {
                                                 } else {                                                    
                                                     ll_results.push(LifeLineData{
                                                         timewarp_tx: prev.0.clone(),
+                                                        prepends: vec!(),
                                                         trunk_or_branch: if step == crate::pathway::_T {true} else {false},
                                                         timestamp: prev.1.clone(),
-                                                        transactions_till_oldest: 0,// TODO fix somehow
-                                                        oldest_tx: ll_comp.lifeline_end_tx.clone().unwrap(),   
-                                                        timewarp_id: prev.2.clone()[0..9].to_string(),
-                                                        oldest_timestamp: ll_comp.lifeline_end_ts.clone().unwrap(),
                                                         unpinned_connecting_txs: vec!(), 
-                                                        connecting_pathway: None,
-                                                        connecting_timestamp: Some(t_b_ts_tag.2.clone()),
-                                                        connecting_timewarp: Some(unwrapped_job.current_tx.clone())
+                                                        timewarp_id: prev.2.clone()[0..9].to_string(),
+                                                        pathdata: LifeLinePathData {
+                                                            transactions_till_oldest: 0,// TODO fix somehow
+                                                            oldest_tx: ll_comp.lifeline_end_tx.clone(),                                                        
+                                                            oldest_timestamp: ll_comp.lifeline_end_ts.clone(),
+                                                            
+                                                            connecting_pathway: None,
+                                                            connecting_timestamp: Some(t_b_ts_tag.2.clone()),
+                                                            connecting_timewarp: Some(unwrapped_job.current_tx.clone())
+                                                        }
                                                     });
                                                     ll_comp.lifeline_prev_index = None;
                                                     ll_comp.lifeline_prev = Some((unwrapped_job.current_tx.clone(),t_b_ts_tag.2, t_b_ts_tag.3));
@@ -229,6 +239,24 @@ impl TransactionPulling {
                         break;
                     }
                 }
+                //TODO add event to subgraph
+                if unwrapped_job.lifeline_component.is_some() {
+                    let ll_comp_un = unwrapped_job.lifeline_component.unwrap();
+                    
+                    let _r = self.storage.process_event(GraphEntryEvent {
+                        between_end: ll_comp_un.between_end,
+                        between_start: ll_comp_un.between_start,
+                        index: self.storage.new_index(),
+                        target_tx_id: ll_comp_un.lifeline_end_tx.clone(),
+                        txid: ll_comp_un.lifeline_start_tx.clone(),
+                        timestamp: ll_comp_un.lifeline_start_ts.clone(),
+                        target_timestamp: ll_comp_un.lifeline_end_ts.clone(),
+                        tx_distance_count: 0, // TODO
+    
+                    });
+                }                
+               
+
                 self.storage.pop_pull_job(unwrapped_job.id);
                 self.working = false;
                 return false;

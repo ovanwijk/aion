@@ -18,7 +18,7 @@ pub fn get_time_key(timestamp:&i64) -> i64 {
     timestamp - (timestamp % SETTINGS.timewarp_index_settings.time_index_clustering_in_seconds as i64)    
 }
 use crate::timewarping::timewarpselecting::TimewarpSelectionState;
-
+use crate::aionmodel::lifeline_subgraph::*;
 
 pub const TIMEWARP_ID_PREFIX:&str = "TW_ID";
 pub const LMI_CONST:&str = "LMI";
@@ -34,7 +34,7 @@ pub const PIN_STATUS_IN_PROGRESS:&str = "in progress";
 pub const PIN_STATUS_NODE_ERROR:&str = "node error";
 pub const PIN_STATUS_PIN_ERROR:&str = "pinning error";
 pub const PIN_STATUS_TRANSACTION_NOT_FOUND:&str = "transaction not found error";
-
+pub const PIN_STATUS_ERROR:[&str; 3] = [PIN_STATUS_NODE_ERROR, PIN_STATUS_TRANSACTION_NOT_FOUND, PIN_STATUS_NODE_ERROR];
 //Persistent cache keys:
 pub const P_CACHE_LAST_LIFELIFE:&str = "LAST_LIFELINE";
 pub const P_CACHE_UNPINNED_LIFELIFE:&str = "UNPINNED_LIFELINE";
@@ -146,6 +146,14 @@ pub trait GenericCachePersistence: Send + Sync + std::fmt::Debug {
 
 }
 
+pub trait SubgraphPersistence: Send + Sync + std::fmt::Debug {
+    fn load_subgraph(&mut self) -> Result<(), String>;
+    fn process_event(&self, event: GraphEntryEvent) -> Result<(), String>;
+    fn store_state(&self) -> Result<(), String>;
+    fn new_index(&self) -> i64;
+    //fn split_edge(&mut self, event: GraphEntryEvent);
+}
+
 pub trait LifelinePersistence: Send + Sync + std::fmt::Debug {
     /// When adding transactions to the lifeline there might be a path of hundreds of transactions that require pinning
     /// Therefore lifeline pinning is asynchronous. This function gets lifeline data that still requires pinning.
@@ -208,7 +216,8 @@ pub trait TimewarpIssueingPersistence {
 /// Pull jobs: These are persisted jobs that are pulling data from other nodes.
 pub trait Persistence: Send + Sync + std::fmt::Debug + 
     CleanDB + TimewarpDetectionPersistence + GenericCachePersistence + 
-    LifelinePersistence + PullJobsPersistence + TimewarpIssueingPersistence  {
+    LifelinePersistence + PullJobsPersistence + TimewarpIssueingPersistence 
+    + SubgraphPersistence {
 
 
 }
@@ -284,34 +293,63 @@ pub struct LifeLineData {
     pub timewarp_tx: String,    
     pub trunk_or_branch: bool,
     pub timestamp: i64,
-    pub transactions_till_oldest: i64,
-    pub oldest_tx: String,
-    #[serde(default = "empty")]
     pub timewarp_id: String,
-    pub oldest_timestamp: i64,
     pub unpinned_connecting_txs: Vec<String>, 
+    pub pathdata: LifeLinePathData,
+    pub prepends: Vec<LifeLinePathData>
+    
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LifeLinePathData {
+    pub transactions_till_oldest: i64,
+    pub oldest_tx: String,    
+    pub oldest_timestamp: i64,
     pub connecting_pathway: Option<PathwayDescriptor>,
     pub connecting_timestamp: Option<i64>,
     pub connecting_timewarp: Option<String>
 }
 
 impl LifeLineData {
+
+    pub fn was_live_added(&self) -> bool {
+        self.pathdata.connecting_timewarp.is_some()
+    }
+
+    pub fn walk_towards(&self, direction:String) -> Option<LifeLinePathData> {
+      
+        if self.was_live_added() {
+            if self.pathdata.oldest_tx == direction {
+                return Some(self.pathdata);
+            }
+        }
+        for path in self.prepends {
+            if path.oldest_tx == direction {
+                return Some(path);
+            }
+        }
+        None
+    }
+
     pub fn connecting_empty_ll_data(&self) -> Option<LifeLineData> {
-        if self.connecting_timewarp.is_none() {
+        if self.pathdata.connecting_timewarp.is_none() {
             return None;
         }
         Some(LifeLineData {
-            timewarp_tx: self.connecting_timewarp.clone().unwrap(),
+            timewarp_tx: self.pathdata.connecting_timewarp.clone().unwrap(),
             trunk_or_branch: self.trunk_or_branch.clone(),
-            timestamp: self.connecting_timestamp.clone().unwrap(),
-            transactions_till_oldest: self.transactions_till_oldest - 1,
-            oldest_tx: self.oldest_tx.clone(),   
+            unpinned_connecting_txs: vec!(),
+            prepends: vec!(),
+            timestamp: self.pathdata.connecting_timestamp.clone().unwrap(),
             timewarp_id: self.timewarp_id.clone(),
-            oldest_timestamp: self.oldest_timestamp.clone(),
-            unpinned_connecting_txs: vec!(), 
-            connecting_pathway: None,
-            connecting_timestamp: None,
-            connecting_timewarp: None
+            pathdata: LifeLinePathData {
+                transactions_till_oldest: self.pathdata.transactions_till_oldest - 1,
+                oldest_tx: self.pathdata.oldest_tx.clone(),                
+                oldest_timestamp: self.pathdata.oldest_timestamp.clone(),                
+                connecting_pathway: None,
+                connecting_timestamp: None,
+                connecting_timewarp: None
+            }
         })
     }
 }
@@ -319,18 +357,19 @@ impl LifeLineData {
 impl Default for LifeLineData {
     fn default() -> LifeLineData {
         LifeLineData{ 
-            timewarp_tx: String::new(),
-            oldest_tx: String::new(),
+            timewarp_tx: String::new(),            
             timewarp_id: String::new(),
             timestamp: 0,
-            oldest_timestamp: 0,
             trunk_or_branch: true,
-            transactions_till_oldest: 0, 
             unpinned_connecting_txs: vec!(),
-            connecting_pathway: None,
-            connecting_timestamp: None,
-            connecting_timewarp: None
-
+            pathdata: LifeLinePathData {
+                oldest_timestamp: 0,
+                transactions_till_oldest: 0, 
+                oldest_tx: String::new(),
+                connecting_pathway: None,
+                connecting_timestamp: None,
+                connecting_timewarp: None
+            }
         }
     }
 }
@@ -385,11 +424,15 @@ pub struct AwaitPinning {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PullJobLifeline {
-    pub lifeline_end_tx: Option<String>,
-    pub lifeline_end_ts: Option<i64>,   
+    pub lifeline_start_tx: String,
+    pub lifeline_start_ts: i64,
+    pub lifeline_end_tx: String,
+    pub lifeline_end_ts: i64,   
     pub lifeline_transitions: HashMap<i64, i64>, //First is the start index, second is the count. [3, 100]    
     pub lifeline_prev: Option<(String, i64, String)>, //when walking a lifeline transition keep the orginal tx. TX, TS, TAG
-    pub lifeline_prev_index: Option<i64> // only set when walking a longer distance.
+    pub lifeline_prev_index: Option<i64>, // only set when walking a longer distance.
+    pub between_start: Option<String>, //Newest transaction id
+    pub between_end: Option<String>, //Oldest transaction id.
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

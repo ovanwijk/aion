@@ -182,18 +182,22 @@ impl TimewarpSelecting {
                 if !skip { 
 
                     lifelines.push(LifeLineData {
+                        prepends: vec!(),
                         timewarp_id: connecting_timewarp.timewarpid.clone(),
                         timewarp_tx: connecting_timewarp.hash.clone(),    
                         trunk_or_branch: connecting_timewarp.trunk_or_branch.clone(),
                         timestamp: connecting_timewarp.timestamp,
-                        oldest_timestamp: ll_unwrapped.oldest_timestamp.clone(),
                         unpinned_connecting_txs: connecting_txs.0.clone(),
-                        //TODO count transactions and append
-                        transactions_till_oldest : 0,
-                        oldest_tx: ll_unwrapped.oldest_tx.clone(),
-                        connecting_pathway: connecting_txs.1.clone(),
-                        connecting_timestamp: Some(ll_unwrapped.timestamp),
-                        connecting_timewarp: Some(ll_unwrapped.timewarp_tx.clone())
+                        pathdata: LifeLinePathData {
+                            oldest_timestamp: ll_unwrapped.pathdata.oldest_timestamp.clone(),
+                        
+                            //TODO count transactions and append
+                            transactions_till_oldest : 0,
+                            oldest_tx: ll_unwrapped.pathdata.oldest_tx.clone(),
+                            connecting_pathway: connecting_txs.1.clone(),
+                            connecting_timestamp: Some(ll_unwrapped.timestamp),
+                            connecting_timewarp: Some(ll_unwrapped.timewarp_tx.clone())
+                        }
                     });
                     ll_unwrapped = lifelines.last().unwrap(); //TODO Fix immutable borrow
                 }
@@ -211,17 +215,20 @@ impl TimewarpSelecting {
             //Unique case, only the first time.
             info!("Initializing lifeline");
             let _r = self.storage.add_to_lifeline(vec!(LifeLineData {
+                prepends: vec!(),
                 timewarp_tx: data.hash.clone(),    
                 trunk_or_branch: data.trunk_or_branch,
                 timestamp: data.timestamp,
-                oldest_timestamp: data.timestamp,
-                unpinned_connecting_txs: vec!(),
-                transactions_till_oldest: 0,
                 timewarp_id: data.timewarpid,
-                oldest_tx: data.hash,
-                connecting_pathway: None,
-                connecting_timestamp: None,
-                connecting_timewarp: None
+                unpinned_connecting_txs: vec!(),
+                pathdata: LifeLinePathData {
+                    oldest_timestamp: data.timestamp,
+                    transactions_till_oldest: 0,                    
+                    oldest_tx: data.hash,
+                    connecting_pathway: None,
+                    connecting_timestamp: None,
+                    connecting_timewarp: None
+                }
             }));
         };
         Ok(())
