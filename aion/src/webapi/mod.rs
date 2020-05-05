@@ -52,10 +52,7 @@ pub async fn aionStatusFn(req:HttpRequest, data: web::Data<APIActors>) ->  Resul
         Some(value) => serde_json::from_slice(&*value).unwrap(),
         None => vec!()
        };
-    let faulty_pin_jobs:Vec<String> = match data.storage.get_generic_cache(crate::indexstorage::P_CACHE_FAULTY_PULLJOB) {                
-        Some(value) => serde_json::from_slice(&*value).unwrap(),
-        None => vec!()
-       };
+    let faulty_pin_jobs:Vec<String> = data.storage.list_faulty_pull_jobs();
 
     let timewarps = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
     let mut active_timewarps = 0;

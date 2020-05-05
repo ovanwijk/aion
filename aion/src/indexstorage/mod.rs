@@ -40,7 +40,7 @@ pub const P_CACHE_LAST_LIFELIFE:&str = "LAST_LIFELINE";
 pub const P_CACHE_UNPINNED_LIFELIFE:&str = "UNPINNED_LIFELINE";
 pub const P_CACHE_PULLJOB:&str = "P_CACHE_PULLJOB";
 pub const P_CACHE_FAULTY_PULLJOB:&str = "P_CACHE_FAULTY_PULLJOB";
-pub const P_CACHE_LIFELINE_SUBGRAPH:&str = "P_CACHE_FAULTY_PULLJOB";
+pub const P_CACHE_LIFELINE_SUBGRAPH:&str = "P_CACHE_LIFELINE_SUBGRAPH";
 
 /// Given a start and end timestamp returns a range of time-indexes.
 pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
@@ -151,6 +151,7 @@ pub trait SubgraphPersistence: Send + Sync + std::fmt::Debug {
     fn process_event(&self, event: GraphEntryEvent) -> Result<(), String>;
     fn store_state(&self) -> Result<(), String>;
     fn new_index(&self) -> i64;
+    fn clone_state(&self) -> LifelineSubGraph;
     //fn split_edge(&mut self, event: GraphEntryEvent);
 }
 
@@ -290,13 +291,10 @@ pub fn default_none<T>() -> Option<T>{
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LifeLineData {
-    pub timewarp_tx: String,    
-    pub trunk_or_branch: bool,
+    pub timewarp_tx: String,
     pub timestamp: i64,
-    pub timewarp_id: String,
     pub unpinned_connecting_txs: Vec<String>, 
-    pub pathdata: LifeLinePathData,
-    pub prepends: Vec<LifeLinePathData>
+    pub paths: Vec<LifeLinePathData>
     
 }
 
@@ -305,71 +303,51 @@ pub struct LifeLinePathData {
     pub transactions_till_oldest: i64,
     pub oldest_tx: String,    
     pub oldest_timestamp: i64,
-    pub connecting_pathway: Option<PathwayDescriptor>,
-    pub connecting_timestamp: Option<i64>,
-    pub connecting_timewarp: Option<String>
+    pub connecting_pathway: PathwayDescriptor,
+    pub connecting_timestamp: i64,
+    pub connecting_timewarp: String
+}
+
+impl LifeLinePathData {
+    pub fn connecting_empty_ll_data(&self) -> LifeLineData {
+      
+        LifeLineData {
+            timewarp_tx: self.connecting_timewarp.clone(),            
+            unpinned_connecting_txs: vec!(),
+            timestamp: self.connecting_timestamp.clone(),
+            paths: vec!()
+            // pathdata: LifeLinePathData {
+            //     transactions_till_oldest: self.pathdata.transactions_till_oldest - 1,
+            //     oldest_tx: self.pathdata.oldest_tx.clone(),                
+            //     oldest_timestamp: self.pathdata.oldest_timestamp.clone(),                
+            //     connecting_pathway: None,
+            //     connecting_timestamp: None,
+            //     connecting_timewarp: None
+            // }
+        }
+    }
 }
 
 impl LifeLineData {
-
-    pub fn was_live_added(&self) -> bool {
-        self.pathdata.connecting_timewarp.is_some()
-    }
-
     pub fn walk_towards(&self, direction:String) -> Option<LifeLinePathData> {
-      
-        if self.was_live_added() {
-            if self.pathdata.oldest_tx == direction {
-                return Some(self.pathdata);
-            }
-        }
-        for path in self.prepends {
+        for path in &self.paths {
             if path.oldest_tx == direction {
-                return Some(path);
+                return Some(path.clone());
             }
         }
         None
     }
 
-    pub fn connecting_empty_ll_data(&self) -> Option<LifeLineData> {
-        if self.pathdata.connecting_timewarp.is_none() {
-            return None;
-        }
-        Some(LifeLineData {
-            timewarp_tx: self.pathdata.connecting_timewarp.clone().unwrap(),
-            trunk_or_branch: self.trunk_or_branch.clone(),
-            unpinned_connecting_txs: vec!(),
-            prepends: vec!(),
-            timestamp: self.pathdata.connecting_timestamp.clone().unwrap(),
-            timewarp_id: self.timewarp_id.clone(),
-            pathdata: LifeLinePathData {
-                transactions_till_oldest: self.pathdata.transactions_till_oldest - 1,
-                oldest_tx: self.pathdata.oldest_tx.clone(),                
-                oldest_timestamp: self.pathdata.oldest_timestamp.clone(),                
-                connecting_pathway: None,
-                connecting_timestamp: None,
-                connecting_timewarp: None
-            }
-        })
-    }
+  
 }
 
 impl Default for LifeLineData {
     fn default() -> LifeLineData {
         LifeLineData{ 
-            timewarp_tx: String::new(),            
-            timewarp_id: String::new(),
+            timewarp_tx: String::new(),
             timestamp: 0,
-            trunk_or_branch: true,
             unpinned_connecting_txs: vec!(),
-            pathdata: LifeLinePathData {
-                oldest_timestamp: 0,
-                transactions_till_oldest: 0, 
-                oldest_tx: String::new(),
-                connecting_pathway: None,
-                connecting_timestamp: None,
-                connecting_timewarp: None
-            }
+            paths: vec!()
         }
     }
 }

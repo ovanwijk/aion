@@ -45,7 +45,7 @@ impl PathwayDescriptor {
             fields: Box::new(vec!())
         };
         t.add_to_path(_T);
-        t.add_to_path(_E);
+        //t.add_to_path(_E);
         return t;
     }
 
@@ -56,7 +56,7 @@ impl PathwayDescriptor {
             fields: Box::new(vec!())
         };
         t.add_to_path(_B);
-        t.add_to_path(_E);
+        //t.add_to_path(_E);
         return t;
     }
 

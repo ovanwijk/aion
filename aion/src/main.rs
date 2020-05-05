@@ -350,6 +350,7 @@ async fn main() -> io::Result<()> {
         .service(webapi::lifeline::lifelineIndexFn)
         .service(webapi::lifeline::lifelineIdFn)
         .service(webapi::lifeline::lifelineLatestF)
+        .service(webapi::lifeline::subgraphFn)
         .service(webapi::timewarpPickedFn)
         .service(webapi::timewarpstateFn)
         .service(webapi::timewarpsFn)

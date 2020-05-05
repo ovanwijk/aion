@@ -125,7 +125,7 @@ impl PathfindingResult {
         let mut c = 0;
         let mut a = String::from("");
         for b in self.branches.into_iter() {
-            if(no_target.get_mut(&txIDs[b[0]]).unwrap().trunk.is_some()){
+            if no_target.get_mut(&txIDs[b[0]]).unwrap().trunk.is_some() {
                 info!("{}", &txIDs[b[0]]);
                 a = txIDs[b[0]].clone();
             };

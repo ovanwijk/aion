@@ -13,6 +13,7 @@ use riker::actors::Context;
 //use iota_lib_rs::iota_model::Transaction;
 //use crate::aionmodel::tangle::*;
 use crate::indexstorage::Persistence;
+use crate::pathway::PathwayDescriptor;
 //use crate::timewarping::zmqlistener::*;
 use crate::timewarping::Protocol;
 use crate::timewarping::WebRequestType;
@@ -138,7 +139,7 @@ impl TimewarpSelecting {
             // We will use this field to internally advance our checks.
             let mut ll_unwrapped = &last_ll.unwrap();
             let next_step = self.storage.tw_detection_get_decision_data(data.target_hash());
-            let mut timewarps:Vec<TimewarpData> = vec!(data);
+            let mut timewarps:Vec<TimewarpData> = vec!(data.clone());
             //First follow the timewarp until the closest point to the lifeline.
             if next_step.is_some() {
                 let mut unwrapped = next_step.unwrap();
@@ -157,7 +158,7 @@ impl TimewarpSelecting {
             // and we need to append from past to present
             let mut lifelines:Vec<LifeLineData> = vec!();
             for connecting_timewarp in timewarps.iter().rev() {
-                let mut skip = false;
+                //let mut skip = false;
                 let connecting_txs = if connecting_timewarp.target_hash() != ll_unwrapped.timewarp_tx.as_ref() {
                     let path_found = crate::iota_api::find_paths(SETTINGS.node_settings.iri_connection(), 
                         connecting_timewarp.hash.to_string(), vec!(ll_unwrapped.timewarp_tx.clone()));
@@ -165,7 +166,7 @@ impl TimewarpSelecting {
                             //IGNORE this timewarp end, we cannot find a path to the location
                             warn!("Found error {:?}", path_found.unwrap_err());
                             info!("Breaking and retrying");
-                            skip = true;
+                            //skip = true;
                             (vec!(), None)
 
                         }else {
@@ -175,29 +176,26 @@ impl TimewarpSelecting {
                            
                         }
                 }else {
-                    (vec!(), None)
+                    (vec!(), Some(if data.trunk_or_branch {PathwayDescriptor::trunk()}else{PathwayDescriptor::branch()}))
                 };
                 //if skipped it mean we consider this particular timewarp transaction to reach to far.
                 //Thus skipping it to add it to our lifeline
-                if !skip { 
+                if connecting_txs.1.is_some() { 
 
-                    lifelines.push(LifeLineData {
-                        prepends: vec!(),
-                        timewarp_id: connecting_timewarp.timewarpid.clone(),
-                        timewarp_tx: connecting_timewarp.hash.clone(),    
-                        trunk_or_branch: connecting_timewarp.trunk_or_branch.clone(),
+                    lifelines.push(LifeLineData {                       
+                        timewarp_tx: connecting_timewarp.hash.clone(),                       
                         timestamp: connecting_timewarp.timestamp,
                         unpinned_connecting_txs: connecting_txs.0.clone(),
-                        pathdata: LifeLinePathData {
-                            oldest_timestamp: ll_unwrapped.pathdata.oldest_timestamp.clone(),
+                        paths: vec!(LifeLinePathData {
+                            oldest_timestamp: if ll_unwrapped.paths.is_empty() {ll_unwrapped.timestamp.clone()}else{ll_unwrapped.paths[0].oldest_timestamp.clone()},
                         
                             //TODO count transactions and append
                             transactions_till_oldest : 0,
-                            oldest_tx: ll_unwrapped.pathdata.oldest_tx.clone(),
-                            connecting_pathway: connecting_txs.1.clone(),
-                            connecting_timestamp: Some(ll_unwrapped.timestamp),
-                            connecting_timewarp: Some(ll_unwrapped.timewarp_tx.clone())
-                        }
+                            oldest_tx: if ll_unwrapped.paths.is_empty() {ll_unwrapped.timewarp_tx.clone()}else{ll_unwrapped.paths[0].oldest_tx.clone()},
+                            connecting_pathway: connecting_txs.1.clone().unwrap(),
+                            connecting_timestamp: ll_unwrapped.timestamp,
+                            connecting_timewarp: ll_unwrapped.timewarp_tx.clone()
+                        })
                     });
                     ll_unwrapped = lifelines.last().unwrap(); //TODO Fix immutable borrow
                 }
@@ -214,21 +212,11 @@ impl TimewarpSelecting {
         }else{
             //Unique case, only the first time.
             info!("Initializing lifeline");
-            let _r = self.storage.add_to_lifeline(vec!(LifeLineData {
-                prepends: vec!(),
-                timewarp_tx: data.hash.clone(),    
-                trunk_or_branch: data.trunk_or_branch,
+            let _r = self.storage.add_to_lifeline(vec!(LifeLineData {                
+                timewarp_tx: data.hash.clone(),
                 timestamp: data.timestamp,
-                timewarp_id: data.timewarpid,
                 unpinned_connecting_txs: vec!(),
-                pathdata: LifeLinePathData {
-                    oldest_timestamp: data.timestamp,
-                    transactions_till_oldest: 0,                    
-                    oldest_tx: data.hash,
-                    connecting_pathway: None,
-                    connecting_timestamp: None,
-                    connecting_timewarp: None
-                }
+                paths: vec!()
             }));
         };
         Ok(())

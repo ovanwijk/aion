@@ -225,7 +225,7 @@ impl LifelineSubGraph {
         let _r = storage.set_generic_cache(crate::indexstorage::P_CACHE_LIFELINE_SUBGRAPH, serde_json::to_vec(&self).unwrap());
         _r
     }
-    pub fn process_event(&mut self, event: GraphEntryEvent, storage:Rc<dyn Persistence>) -> Result<(), String> {
+    pub fn process_event__(&mut self, event: GraphEntryEvent, storage:Rc<dyn Persistence>) -> Result<(), String> {
         if self.vertices.is_empty() {
             if event.index != 0 {
                 return Err("First event index should be one".to_string());
