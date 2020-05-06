@@ -43,16 +43,6 @@ pub async fn lifelineConnectF(info: web::Json<LifelineSyncRequest>, data: web::D
 }
 
 
-#[get("/subgraph")]
-pub async fn subgraphFn(data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
-    //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
-    let r = data.storage.clone_state();
-    Ok(HttpResponse::Ok()
-    .content_type("application/json")
-    .body( serde_json::to_string_pretty(&ReturnData {
-        data: r
-    }).unwrap()))
-}
 
 #[get("/lifeline")]
 pub async fn lifelineLatestF(data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {

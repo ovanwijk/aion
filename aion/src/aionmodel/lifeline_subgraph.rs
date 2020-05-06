@@ -117,7 +117,7 @@ impl LifelineSubGraph {
         // Insert X (reference_me: A)
         let mut ref_me = HashMap::new();
         ref_me.insert(event.between_start.clone().unwrap(), GraphEdge{
-            tx_distance:0, // event.tx_distance_count.clone(),
+            tx_distance: 0, // event.tx_distance_count.clone(),
             time_distance: start.timestamp - event.timestamp
         });
         //  (i_reference, X & D)
@@ -166,7 +166,7 @@ impl LifelineSubGraph {
         //Update top node A to reference X
         
         end.reference_me.insert(event.txid.clone(), GraphEdge {
-            tx_distance: 0, //TODO, implement tx distance calculation event.tx_distance_count.clone(),
+            tx_distance: event.tx_distance_count, //TODO, implement tx distance calculation event.tx_distance_count.clone(),
             time_distance: event.timestamp - event.target_timestamp
         });
         // X will not be referenced, new tip
@@ -174,7 +174,7 @@ impl LifelineSubGraph {
      
         let mut i_ref = HashMap::new();
         i_ref.insert(event.target_tx_id.clone(), GraphEdge{
-            tx_distance:0, // event.tx_distance_count.clone(),
+            tx_distance: event.tx_distance_count, // event.tx_distance_count.clone(),
             time_distance: event.timestamp - event.target_timestamp
         });
 
@@ -202,7 +202,7 @@ impl LifelineSubGraph {
         //Update top node A to reference X
         
         start.i_reference.insert(event.target_tx_id.clone(), GraphEdge {
-            tx_distance: 0, //TODO, implement tx distance calculation event.tx_distance_count.clone(),
+            tx_distance: event.tx_distance_count, //TODO, implement tx distance calculation event.tx_distance_count.clone(),
             time_distance: event.timestamp - event.target_timestamp
         });
         // X will not be referenced, new tip
@@ -210,7 +210,7 @@ impl LifelineSubGraph {
      
         let i_ref = HashMap::new();
         ref_me.insert(event.txid.clone(), GraphEdge{
-            tx_distance:0, // event.tx_distance_count.clone(),
+            tx_distance: event.tx_distance_count, // event.tx_distance_count.clone(),
             time_distance: event.timestamp - event.target_timestamp
         });
 

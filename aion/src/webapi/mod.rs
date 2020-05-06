@@ -15,6 +15,7 @@ use iota_model::Transaction;
 pub mod webask;
 pub mod lifeline;
 pub mod storage;
+pub mod subgraph;
 
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
