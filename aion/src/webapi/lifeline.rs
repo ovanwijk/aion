@@ -83,7 +83,12 @@ pub async fn lifelineTsFn(info: web::Path<i64>, data: web::Data<APIActors>) ->  
 #[get("/lifeline/ts_index/{timewarmp}")]
 pub async fn lifelineIndexFn(info: web::Path<i64>, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
     //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
-    let r = data.storage.get_lifeline(&crate::indexstorage::get_time_key(&info));
+    let r = if info.clone() == 0 {
+        data.storage.get_lifeline(&crate::indexstorage::get_time_key(&crate::now()))
+    }else{
+        data.storage.get_lifeline(&crate::indexstorage::get_time_key(&info))
+    };
+  
     Ok(HttpResponse::Ok()
     .content_type("application/json")
     .body( serde_json::to_string_pretty(&ReturnData {

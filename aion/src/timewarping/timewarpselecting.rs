@@ -226,10 +226,10 @@ impl TimewarpSelecting {
         let mut selected = warps.first().expect("At least one element");
         
         for x in warps {
-            let score_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash == x.hash { 0}else {
+            let score_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.timewarpid == x.timewarpid { 0}else {
                 SETTINGS.timewarp_index_settings.detection_threshold_switch_timewarp_in_seconds as isize
             };
-            let selected_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.hash == selected.hash { 0}else {
+            let selected_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.timewarpid == selected.timewarpid { 0}else {
                 SETTINGS.timewarp_index_settings.detection_threshold_switch_timewarp_in_seconds as isize
             };
             if x.score() - score_sub  

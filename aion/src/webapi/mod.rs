@@ -150,7 +150,8 @@ pub async fn timewarpPickedFn(req:HttpRequest, data: web::Data<APIActors>) ->  R
 #[get("/timewarp/{id}")]
 pub async fn timewarpIdFn(info: web::Path<String>, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
     //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
-    let r = crate::indexstorage::get_n_timewarp_transactions(info.to_string(), 15, data.storage.clone());
+    let r = data.storage.tw_detection_get_decision_data(info.to_string());
+    //let r = crate::indexstorage::get_n_timewarp_transactions(info.to_string(), 15, data.storage.clone());
     Ok(HttpResponse::Ok()
     .content_type("application/json")
     .body( serde_json::to_string_pretty(&ReturnData {

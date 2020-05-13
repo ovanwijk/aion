@@ -211,7 +211,7 @@ impl TimewarpWalker {
                                 info!("Found reference to already detected timewarp transaction.");
                                 finished = true;
                             }
-                            info!("Found and added, ID:{}, ADDRESS:{}, TW: {}",tx.hash.clone(), &walked_unwrapped.address, tw_hash);
+                            info!("Found and added {}/{}, ID:{}, ADDRESS:{}, TW: {}",to_return.len(),crate::SETTINGS.timewarp_index_settings.max_walking_depth_timewarp, tx.hash.clone(), &walked_unwrapped.address, tw_hash);
                         }else{
                             info!("Invalid timewarp signature, ID: {} ADDRESS:{} TW: {}",tx.hash.clone(), &walked_unwrapped.address, tw_hash);
                             finished = true;
@@ -236,6 +236,10 @@ impl TimewarpWalker {
             //nothing to see possibly beginning of timewarp. Set timewarpID
             info!("Is none {}", txid.to_owned());
             finished = true;
+        }
+        if to_return.len() >= crate::SETTINGS.timewarp_index_settings.max_walking_depth_timewarp as usize {
+            finished = true;
+            info!("Stopped at {} walking depth", crate::SETTINGS.timewarp_index_settings.max_walking_depth_timewarp);
         }
         }
        
