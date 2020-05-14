@@ -152,6 +152,7 @@ pub trait SubgraphPersistence: Send + Sync + std::fmt::Debug {
     fn store_state(&self) -> Result<(), String>;
     fn new_index(&self) -> i64;
     fn clone_state(&self) -> LifelineSubGraph;
+    fn get_path(&self, start:String, end:String) -> Result<Vec<PullJob>, String>;
     //fn split_edge(&mut self, event: GraphEntryEvent);
 }
 
@@ -464,7 +465,8 @@ impl TimewarpData {
     }
 
     pub fn score(&self) -> isize {
-        (self.index_since_id * self.avg_distance) as isize
+        
+        (std::cmp::min(self.index_since_id, 100) * std::cmp::min(self.avg_distance, 120)) as isize
     }
  }
 use serde::{Serializer, Deserializer};

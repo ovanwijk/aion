@@ -16,6 +16,15 @@ impl SubgraphPersistence for RocksDBProvider {
         let _r = self.set_generic_cache(crate::indexstorage::P_CACHE_LIFELINE_SUBGRAPH, serde_json::to_vec(&self.LIFELINE_SUBGRAPH.lock().unwrap().clone()).unwrap());
         _r
     }
+
+    fn get_path(&self, start:String, end:String) -> Result<Vec<PullJob>, String> {
+        let subgraph = self.LIFELINE_SUBGRAPH.lock().unwrap();
+        subgraph.
+
+        Err(String::new())
+    }
+
+
     fn process_event(&self, event: GraphEntryEvent) -> Result<(), String> {
         let mut subgraph = self.LIFELINE_SUBGRAPH.lock().unwrap();
         if subgraph.vertices.is_empty() {

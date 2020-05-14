@@ -84,7 +84,7 @@ impl TimewarpSelecting {
         //We filter using the min_distance_in_seconds of timewarp time so that we are not switching from one to the
         //if two are started around the same time.
         let timewarps:std::vec::Vec<TimewarpData> = crate::indexstorage::get_lastest_known_timewarps(self.storage.clone())
-            .into_iter().filter(|t| t.timestamp > crate::now() - self.min_distance_in_seconds).collect();
+            .into_iter().filter(|t| t.timestamp > crate::now() - (self.min_distance_in_seconds * 2)).collect();
         if timewarps.len() == 0 {
             return;
         }
@@ -115,7 +115,10 @@ impl TimewarpSelecting {
                 self.store_newly_pick(best_tw.clone());
                 self.storage.set_last_picked_tw(self.picked_timewarp.as_ref().unwrap().clone());
             }else{
-                warn!("Switch required but not yet a path found.");
+                warn!("Switch required but not yet a path found. {}:{} , {}:{}",
+                 self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.timewarpid,
+                 self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.score(),
+                 best_tw.timewarpid, best_tw.score());
             }
             //TODO add to last picked
             //let _a = self.storage.add_last_picked_tw(vec!(best_tw));
@@ -223,7 +226,19 @@ impl TimewarpSelecting {
     }
 
     fn best_timewarp(&self, warps: &Vec<TimewarpData>) -> TimewarpData {
-        let mut selected = warps.first().expect("At least one element");
+        let mut selected =  &TimewarpData{
+            timewarpid: String::new(),
+            hash: String::new(),
+            trunk: String::new(),
+            branch: String::new(),
+            distance: 0,
+            trunk_or_branch: false,
+            timestamp: 0,
+            timestamp_deviation_factor:0.0,
+            avg_distance: 0,
+            index_since_id: 0,
+        };
+        //warps.first().expect("At least one element");
         
         for x in warps {
             let score_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.timewarpid == x.timewarpid { 0}else {
@@ -256,7 +271,7 @@ impl TimewarpSelecting {
             }else { None },
             storage: storage.clone(),            
             node: node.to_string(),
-            min_distance_in_seconds: 180,
+            min_distance_in_seconds: crate::SETTINGS.timewarp_index_settings.detection_threshold_switch_timewarp_in_seconds,
             start_time: crate::now(),
             ready: false
         }

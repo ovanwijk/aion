@@ -185,6 +185,26 @@ impl LifelineSubGraph {
         });
     }
 
+    pub fn find_path(start: String, end: String, subgraph: &LifelineSubGraph) -> Result<Vec<String>, String> {
+        let a = subgraph.vertices.get(&start);
+        let b = subgraph.vertices.get(&end);
+        if a.is_none() || b.is_none() {
+            return Err(String::from("start or end does not exist."));
+        }
+        let start_un = a.unwrap();
+        let end_un = b.unwrap();
+
+        let mut paths:HashMap<String, (Vec<String>, i64)> = HashMap::new();
+        let mut finished = false;
+        let mut lowest_score: (Vec<String>, i64) = (vec!(end.clone()), 0);
+        while !finished {
+            //TODO
+
+        }
+        
+
+    }
+
 
      /**
      *    A   A
