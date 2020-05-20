@@ -152,6 +152,7 @@ pub trait SubgraphPersistence: Send + Sync + std::fmt::Debug {
     fn store_state(&self) -> Result<(), String>;
     fn new_index(&self) -> i64;
     fn clone_state(&self) -> LifelineSubGraph;
+    fn reload_pathfinding(&self);
     fn get_path(&self, start:String, end:String) -> Result<Vec<PullJob>, String>;
     //fn split_edge(&mut self, event: GraphEntryEvent);
 }
@@ -330,9 +331,9 @@ impl LifeLinePathData {
 }
 
 impl LifeLineData {
-    pub fn walk_towards(&self, direction:String) -> Option<LifeLinePathData> {
+    pub fn walk_towards(&self, direction:&String) -> Option<LifeLinePathData> {
         for path in &self.paths {
-            if path.oldest_tx == direction {
+            if &path.oldest_tx == direction {
                 return Some(path.clone());
             }
         }
@@ -361,9 +362,7 @@ pub struct PinDescriptor {
     pub lifeline_tx: String,
     pub pathway: PathwayDescriptor,
     pub endpoints: Vec<String>,
-    pub pathway_index_splits: Vec<isize>,    
-    pub metadata: String,
-    
+    pub metadata: String,    
     pub dependant: String,
     pub lifeline_component: Option<PullJobLifeline>
     

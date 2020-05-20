@@ -27,6 +27,7 @@ failure = "0.1"
 rocksdb = "0.12.4"
 lru-cache = "0.1.2"
 log = "0.4"
+petgraph = "0.5.0"
 #bincode = "1.2.0"
 
 env_logger = { version = "0.7"}

@@ -206,7 +206,7 @@ impl PathfindingResult {
                 _ => {}
             };
         }
-        to_return.add_to_path(_E);
+        //to_return.add_to_path(_E);
 
         to_return
     }

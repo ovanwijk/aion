@@ -111,10 +111,21 @@ impl PathwayDescriptor {
         result
     }
 
-    pub fn extend(&mut self, pathway:PathwayDescriptor) {
-        self.size -= 1;
-        self.tx_count -= 1;
-        //self.add_to_path(if trunk_or_branch {_T}else{_B});
+    // pub fn extend(&mut self, pathway:PathwayDescriptor) {
+    //     self.size -= 1;
+    //     self.tx_count -= 1;
+    //     //self.add_to_path(if trunk_or_branch {_T}else{_B});
+    //     let iterator = PathwayIterator{
+    //         descriptor:pathway,
+    //         index: 0
+    //     };
+    //     for step in iterator {
+    //         self.add_to_path(step);
+    //     }
+    //     //for what in pathway.
+    // }
+
+    pub fn append(&mut self, pathway:PathwayDescriptor) {
         let iterator = PathwayIterator{
             descriptor:pathway,
             index: 0

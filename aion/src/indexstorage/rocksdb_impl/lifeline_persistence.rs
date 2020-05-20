@@ -108,7 +108,7 @@ impl LifelinePersistence for RocksDBProvider {
         if _r.is_none() {
             return Err(String::from("Referncing transaction is not a lifeline transaction or the first lifeline data is not the referencing transaction."));
         }
-        let mut previous_ll = _r.unwrap();
+        let mut previous_ll = _r.unwrap();       
         let handle = self.provider.cf_handle(LIFELINE_INDEX_COLUMN).unwrap();
         let range_handle = self.provider.cf_handle(LIFELINE_INDEX_RANGE_COLUMN).unwrap();
         let mut batch = WriteBatch::default();
@@ -121,7 +121,7 @@ impl LifelinePersistence for RocksDBProvider {
             
             //TODO handle errors
             batch.put_cf(handle, path.connecting_timewarp.clone().as_bytes(), serde_json::to_vec(&path.connecting_empty_ll_data()).unwrap());
-            batch.put(current_time_key.to_be_bytes(), serde_json::to_vec(&current_ll_time_index).unwrap());
+            batch.put_cf(range_handle, current_time_key.to_be_bytes(), serde_json::to_vec(&current_ll_time_index).unwrap());
             batch.put_cf(handle, ll_data.timewarp_tx.clone().as_bytes(), serde_json::to_vec(&ll_data).unwrap());
         }
         

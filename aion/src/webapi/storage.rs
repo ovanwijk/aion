@@ -38,7 +38,6 @@ impl CreateStorageReponse {
           //  is_pinned: false,
             timestamp: crate::now(),
             metadata: String::default(),
-            pathway_index_splits: vec!(),
           
             dependant: self.dependant.clone(),
             lifeline_component: None,
@@ -93,7 +92,7 @@ pub async fn connect_storage_object_fn(info: web::Json<CreateStorageReponse>, da
         if !object_found.is_err() {
             let mut pathway =  object_found.unwrap().to_pathway(start.clone());
             //extend the pathway found to the one given.
-            pathway.extend(info.pathway.clone());
+            pathway.append(info.pathway.clone());
 
             println!("Pathway transform took: {}", t.elapsed().as_millis());
             t = std::time::Instant::now();

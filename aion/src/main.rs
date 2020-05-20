@@ -17,6 +17,7 @@ extern crate surf;
 extern crate env_logger;
 extern crate failure;
 extern crate futures;
+extern crate petgraph;
 
 //type Result<T> = ::std::result::Result<T, failure::Error>;
 mod timewarping;

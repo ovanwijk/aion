@@ -28,6 +28,7 @@ pub const TW_DETECTION_RANGE_TX_INDEX_COLUMN:&str = "TW_DETECTION_RANGE_TX_INDEX
 pub const TW_DETECTION_RANGE_GROUP_INDEX_COLUMN:&str = "TW_DETECTION_RANGE_GROUP_INDEX_COLUMN";
 pub const FOLLOWED_TW_INDEX_COLUMN:&str = "FOLLOWED_TW_INDEX_COLUMN";
 pub const FOLLOWED_TW_INDEX_RANGE_COLUMN:&str = "FOLLOWED_TW_INDEX_RANGE_COLUMN";
+pub const PULLJOB_CACHE_COLUMN:&str = "PULLJOB_CACHE_COLUMN";
 
 pub const LIFELINE_INDEX_COLUMN:&str = "LIFELINE_INDEX_COLUMN";
 pub const LIFELINE_INDEX_RANGE_COLUMN:&str = "LIFELINE_INDEX_RANGE_COLUMN";
@@ -47,7 +48,8 @@ pub struct RocksDBProvider {
     FOLLOWED_TW_INDEX_RANGE_COLUMN_cache:  Mutex<LruCache<i64, HashMap<String, String>>>,
     FOLLOWED_TW_INDEX_COLUMN_cache:  Mutex<LruCache<String, TimewarpData>>,
     LAST_PICKED_TW_cache: Mutex<Option<TimewarpSelectionState>>,
-    LIFELINE_SUBGRAPH: Mutex<LifelineSubGraph>
+    LIFELINE_SUBGRAPH: Mutex<LifelineSubGraph>,
+    
 }
 
 impl CleanDB for RocksDBProvider {
@@ -79,7 +81,8 @@ impl RocksDBProvider {
             PATHWAY_DESCRIPTORS,
             FLEXIBLE_ZERO,
             PULLJOB_ID_COLUMN,
-            PERSISTENT_CACHE]).unwrap();
+            PERSISTENT_CACHE,
+            PULLJOB_CACHE_COLUMN]).unwrap();
         
         let mut toReturn = RocksDBProvider {
             provider: db,

@@ -37,6 +37,12 @@ pub struct GraphEdge {
     pub time_distance: i64
 }
 
+impl GraphEdge {   
+    pub fn score(&self) -> i64 {
+        self.time_distance * self.tx_distance
+    }
+}
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LifelineSubGraph {
@@ -44,9 +50,23 @@ pub struct LifelineSubGraph {
     pub lastest_and_top_connected: bool,
     pub top_level: String,
     pub current_index: i64,
-    pub vertices: HashMap<String, GraphVertex>  
+    pub vertices: HashMap<String, GraphVertex>  ,
+    #[serde(skip)]
+    pub petgraph: petgraph::graph::DiGraph<String, usize>
 }
 
+impl Default for LifelineSubGraph {
+    fn default() -> LifelineSubGraph {
+        LifelineSubGraph {
+            top_level_txcount_cutoff: 0,
+            lastest_and_top_connected: true,
+            top_level: String::new(),
+            current_index: 0,
+            vertices: HashMap::new(),
+            petgraph: petgraph::graph::DiGraph::new()
+        }
+    }
+}
 
 impl LifelineSubGraph {
     /**
@@ -105,7 +125,7 @@ impl LifelineSubGraph {
         
     }
 
-     pub fn split_edge(event: GraphEntryEvent, subgraph:&mut LifelineSubGraph) {
+     pub fn split_edge(event: &GraphEntryEvent, subgraph:&mut LifelineSubGraph) {
         let start = subgraph.vertices.get_mut(&event.between_start.clone().unwrap()).expect("");
         
         //Update top node A to reference X
@@ -145,7 +165,7 @@ impl LifelineSubGraph {
         let end = subgraph.vertices.get_mut(&event.between_end.clone().unwrap()).expect("");
 
         // Update D to have reference_me as X instead of A
-        let _old_end = end.reference_me.remove(&event.between_start.unwrap()).unwrap();
+        let _old_end = end.reference_me.remove(&event.between_start.clone().unwrap()).unwrap();
         end.reference_me.insert(event.txid.clone(), GraphEdge {
             tx_distance: 0, //TODO, implement tx distance calculation event.tx_distance_count.clone(),
             time_distance: event.timestamp - end.timestamp
@@ -160,7 +180,7 @@ impl LifelineSubGraph {
      *    |   |
      *    B   B
      */
-    pub fn append(event: GraphEntryEvent, subgraph:&mut LifelineSubGraph) {
+    pub fn append(event: &GraphEntryEvent, subgraph:&mut LifelineSubGraph) {
         let end = subgraph.vertices.get_mut(&event.between_end.clone().unwrap()).expect("");
         
         //Update top node A to reference X
@@ -197,11 +217,11 @@ impl LifelineSubGraph {
         let mut paths:HashMap<String, (Vec<String>, i64)> = HashMap::new();
         let mut finished = false;
         let mut lowest_score: (Vec<String>, i64) = (vec!(end.clone()), 0);
-        while !finished {
-            //TODO
+        // while !finished {
+        //     //TODO
 
-        }
-        
+        // }
+        Ok(vec!())
 
     }
 
@@ -213,7 +233,7 @@ impl LifelineSubGraph {
      *    |   |
      *    B   X
      */
-    pub fn prepend(event: GraphEntryEvent, subgraph:&mut LifelineSubGraph) {
+    pub fn prepend(event: &GraphEntryEvent, subgraph:&mut LifelineSubGraph) {
 
         // event.txid should be equal to event.between_start
 
@@ -241,11 +261,11 @@ impl LifelineSubGraph {
         });
     }
 
-    fn store_state(&self, event: GraphEntryEvent, storage:Rc<dyn Persistence>) -> Result<(), String> {
+    fn _store_state(&self, event: GraphEntryEvent, storage:Rc<dyn Persistence>) -> Result<(), String> {
         let _r = storage.set_generic_cache(crate::indexstorage::P_CACHE_LIFELINE_SUBGRAPH, serde_json::to_vec(&self).unwrap());
         _r
     }
-    pub fn process_event__(&mut self, event: GraphEntryEvent, storage:Rc<dyn Persistence>) -> Result<(), String> {
+    pub fn _process_event__(&mut self, event: GraphEntryEvent, storage:Rc<dyn Persistence>) -> Result<(), String> {
         if self.vertices.is_empty() {
             if event.index != 0 {
                 return Err("First event index should be one".to_string());
@@ -266,7 +286,7 @@ impl LifelineSubGraph {
             (None, _) => Err("Must have start".to_string())
         };
 
-        self.store_state(event, storage.clone());
+        self._store_state(event, storage.clone());
 
         to_return
     }
@@ -277,9 +297,14 @@ impl LifelineSubGraph {
             top_level: String::from(""),
             current_index: -1,
             lastest_and_top_connected: false,
-            vertices: HashMap::new()
+            vertices: HashMap::new(),
+            petgraph: petgraph::graph::DiGraph::new()
         } 
     }
+
+
+   
+
 
     pub fn load(storage:Rc<dyn Persistence>) -> Result<LifelineSubGraph, String>  {
         let _r = storage.get_generic_cache(crate::indexstorage::P_CACHE_LIFELINE_SUBGRAPH);
@@ -289,10 +314,12 @@ impl LifelineSubGraph {
                 top_level: String::from(""),
                 current_index: -1,
                 lastest_and_top_connected: false,
-                vertices: HashMap::new()
+                vertices: HashMap::new(),
+                petgraph: petgraph::graph::DiGraph::new()
             } );
         }
-        let result:LifelineSubGraph = serde_json::from_slice(&_r.unwrap()).expect("Lifeline data to be correct");
+        let mut result: LifelineSubGraph = serde_json::from_slice(&_r.unwrap()).expect("Lifeline data to be correct");
+        //result.reload_pathfinding();
         return Ok(result);
 
 
