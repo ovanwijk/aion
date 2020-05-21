@@ -54,11 +54,11 @@ pub fn get_time_key_range(start:&i64, end:&i64) -> Vec<i64> {
 }
 
 
-pub fn storage_hash(start:String, endpoints:&Vec<String>) -> Vec<u8> {
+pub fn storage_hash(data:&Vec<String>) -> Vec<u8> {
     let mut hasher = Sha256::new();
-    hasher.input(start);
+    //hasher.input(start);
     //we sort the endpoints so we get a standarized result.
-    let mut it = endpoints.clone();
+    let mut it = data.clone();
     it.sort();
     for r in it {
         hasher.input(r);
@@ -153,7 +153,7 @@ pub trait SubgraphPersistence: Send + Sync + std::fmt::Debug {
     fn new_index(&self) -> i64;
     fn clone_state(&self) -> LifelineSubGraph;
     fn reload_pathfinding(&self);
-    fn get_path(&self, start:String, end:String) -> Result<Vec<PullJob>, String>;
+    fn get_path(&self, start:String, end:String) -> Result<Vec<PinDescriptor>, String>;
     //fn split_edge(&mut self, event: GraphEntryEvent);
 }
 
@@ -370,13 +370,13 @@ pub struct PinDescriptor {
 }
 
 impl PinDescriptor {
-    pub fn id(&self) -> Vec<u8> {
-        storage_hash(self.lifeline_tx.clone(), &self.endpoints)
+    pub fn id(&self) -> String {
+        base64::encode_config(&storage_hash(&vec!(self.lifeline_tx.clone(), self.pathway.format())), base64::URL_SAFE)
     }
 
     pub fn to_pull_job(&self, node: String) -> PullJob {
         PullJob{
-            id: base64::encode_config(&self.id(), base64::URL_SAFE),
+            id: self.id(),
             current_tx: self.lifeline_tx.clone(),
             current_index: 0,
             history: vec!(),
@@ -463,8 +463,7 @@ impl TimewarpData {
         }
     }
 
-    pub fn score(&self) -> isize {
-        
+    pub fn score(&self) -> isize {        
         (std::cmp::min(self.index_since_id, 100) * std::cmp::min(self.avg_distance, 120)) as isize
     }
  }

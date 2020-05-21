@@ -21,6 +21,18 @@ pub async fn subgraphFn(data: web::Data<APIActors>) ->  Result<HttpResponse, Err
     }).unwrap()))
 }
 
+// #[get("/subgraph/force_entry")]
+// pub async fn forceEntryFn(data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
+//     //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
+//     let r = data.storage.get_last_lifeline();
+//     //let r = data.storage.clone_state();
+//     Ok(HttpResponse::Ok()
+//     .content_type("application/json")
+//     .body( serde_json::to_string_pretty(&ReturnData {
+//         data: timewarp_path
+//     }).unwrap()))
+// }
+
 
 #[get("/subgraph/connect/{start}/{end}")]
 pub async fn subgraphConnectFn(info: web::Path<(String, String)>,data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
@@ -32,15 +44,15 @@ pub async fn subgraphConnectFn(info: web::Path<(String, String)>,data: web::Data
     }
     let start_un = start.unwrap();
     let end_un = end.unwrap();
-
+    let timewarp_path = data.storage.get_path(info.0.clone(), info.1.clone()).expect("To return a result");
     
 
 
 
-    let r = data.storage.clone_state();
+    //let r = data.storage.clone_state();
     Ok(HttpResponse::Ok()
     .content_type("application/json")
     .body( serde_json::to_string_pretty(&ReturnData {
-        data: r
+        data: timewarp_path
     }).unwrap()))
 }

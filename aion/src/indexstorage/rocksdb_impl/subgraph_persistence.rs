@@ -1,6 +1,10 @@
 use crate::indexstorage::*;
 use crate::indexstorage::rocksdb_impl::*;
 use crate::pathway::*;
+use crate::petgraph::visit::*;
+use crate::petgraph::graph::*;
+use crate::petgraph::prelude::*;
+
 impl RocksDBProvider { 
 
 
@@ -86,7 +90,7 @@ impl RocksDBProvider {
                     Some(data) => {
                         
                         if data.connecting_pathway.tx_count > 1 {
-                            jump_points.insert(pathway.tx_count as i64, pathway.tx_count as i64);
+                            jump_points.insert(pathway.tx_count as i64, data.connecting_pathway.tx_count as i64);
                         }
                         pathway.append(data.connecting_pathway);
                         if &data.connecting_timewarp == end {
@@ -143,11 +147,30 @@ impl SubgraphPersistence for RocksDBProvider {
         let _r = self.set_generic_cache(crate::indexstorage::P_CACHE_LIFELINE_SUBGRAPH, serde_json::to_vec(&self.LIFELINE_SUBGRAPH.lock().unwrap().clone()).unwrap());
         _r
     }
+    
 
-    fn get_path(&self, start:String, end:String) -> Result<Vec<PullJob>, String> {
-        let subgraph = self.LIFELINE_SUBGRAPH.lock().unwrap();
+    fn get_path(&self, start:String, end:String) -> Result<Vec<PinDescriptor>, String> {
+        let subgraph = self.LIFELINE_SUBGRAPH.lock().unwrap(); 
         //subgraph.
-
+        let end_index = subgraph.node_indexes.get(&end).unwrap();
+        let start_index = subgraph.node_indexes.get(&start).unwrap().clone();
+        //let b:&Graph<String, i64> = &subgraph.petgraph.clone();
+        
+        //let result =  // petgraph::algo::dijkstra(&subgraph.petgraph, start_index , Some(*end_index), |e| *e.weight());
+        let result = petgraph::algo::astar(&subgraph.petgraph, start_index ,
+          |finsihed| &finsihed == end_index, |e| *e.weight(),  |_| 0);
+        if result.is_some() {
+            let ab = result.unwrap();
+            let res:Vec<String> =  ab.1.iter().map(|a| subgraph.node_indexes_reverse.get(a).unwrap().clone()).collect();
+            let mut to_return:Vec<PinDescriptor> = vec!();
+            let mut iter = res.iter();
+            let mut prev = iter.next().unwrap().clone();
+            for s in iter {
+                to_return.push(self.get_pull_job_cache(prev.clone(), s.clone()).expect("The cache to be filled"));
+                prev = s.clone();
+            }
+            return Ok(to_return);
+        }
         Err(String::new())
     }
 
@@ -180,6 +203,12 @@ impl SubgraphPersistence for RocksDBProvider {
             (None, None) => Err("Must have start or end".to_string())
         };
         subgraph.current_index += 1;
+        let prev_toplevel = subgraph.vertices.get(&subgraph.top_level).unwrap();
+        let latest_add = subgraph.vertices.get(&event.txid).unwrap();
+        if prev_toplevel.timestamp < latest_add.timestamp && latest_add.reference_me.is_empty() {
+            subgraph.top_level = event.txid.clone();
+        }
+
         
         //manually drop the lock
         drop(subgraph);
@@ -206,20 +235,27 @@ impl SubgraphPersistence for RocksDBProvider {
     fn reload_pathfinding(&self) {
         let mut subgraph = self.LIFELINE_SUBGRAPH.lock().unwrap();
         let mut tempMap: HashMap<String, petgraph::graph::NodeIndex> = HashMap::new();
-        let mut tempGraph: petgraph::graph::DiGraph<String, usize> = petgraph::graph::DiGraph::new();
+        let mut tempMap_reverse: HashMap<petgraph::graph::NodeIndex, String> = HashMap::new();
+        let mut tempGraph: petgraph::graph::Graph<String, i64, petgraph::Directed> = petgraph::graph::DiGraph::new();
         for (k, v) in subgraph.vertices.iter() {
             if !tempMap.contains_key(k) {
-                tempMap.insert(k.clone(), tempGraph.add_node(k.clone()));
+                let n =  tempGraph.add_node(k.clone());
+                    tempMap.insert(k.clone(),n.clone());
+                    tempMap_reverse.insert(n.clone(), k.clone());
             }
 
             for (ref_a, v_2) in v.i_reference.iter() {
                 if !tempMap.contains_key(ref_a) {
-                    tempMap.insert(ref_a.clone(), tempGraph.add_node(ref_a.clone()));
+                    let n =  tempGraph.add_node(ref_a.clone());
+                    tempMap.insert(ref_a.clone(),n.clone());
+                    tempMap_reverse.insert(n.clone(), ref_a.clone());
                 }
-                tempGraph.add_edge(tempMap.get(k).unwrap().clone(), tempMap.get(ref_a).unwrap().clone(), v_2.score() as usize);
+                tempGraph.add_edge(tempMap.get(k).unwrap().clone(), tempMap.get(ref_a).unwrap().clone(), v_2.score());
             }
         }
         subgraph.petgraph = tempGraph;
+        subgraph.node_indexes = tempMap;
+        subgraph.node_indexes_reverse = tempMap_reverse;
     }   
 
     fn load_subgraph(&mut self) -> Result<(), String>  {
@@ -230,6 +266,7 @@ impl SubgraphPersistence for RocksDBProvider {
         let result:LifelineSubGraph = serde_json::from_slice(&_r.unwrap()).expect("Lifeline data to be correct");
         let mut a = self.LIFELINE_SUBGRAPH.lock().expect("Could not lock");
         std::mem::replace(&mut *a, result);
+        drop(a);
         self.reload_pathfinding();
         return Ok(());
 

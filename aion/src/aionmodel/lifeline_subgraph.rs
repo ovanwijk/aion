@@ -50,9 +50,14 @@ pub struct LifelineSubGraph {
     pub lastest_and_top_connected: bool,
     pub top_level: String,
     pub current_index: i64,
-    pub vertices: HashMap<String, GraphVertex>  ,
+    pub vertices: HashMap<String, GraphVertex>,
     #[serde(skip)]
-    pub petgraph: petgraph::graph::DiGraph<String, usize>
+    pub petgraph: petgraph::graph::Graph<String, i64, petgraph::Directed>,
+    #[serde(skip)]
+    pub node_indexes: HashMap<String, petgraph::graph::NodeIndex>,
+    #[serde(skip)]
+    pub node_indexes_reverse: HashMap<petgraph::graph::NodeIndex, String>,
+
 }
 
 impl Default for LifelineSubGraph {
@@ -61,9 +66,12 @@ impl Default for LifelineSubGraph {
             top_level_txcount_cutoff: 0,
             lastest_and_top_connected: true,
             top_level: String::new(),
-            current_index: 0,
+            current_index: -1,
             vertices: HashMap::new(),
-            petgraph: petgraph::graph::DiGraph::new()
+            petgraph: petgraph::graph::DiGraph::new(),
+            node_indexes: HashMap::new(),
+            node_indexes_reverse: HashMap::new(),
+
         }
     }
 }
@@ -205,25 +213,7 @@ impl LifelineSubGraph {
         });
     }
 
-    pub fn find_path(start: String, end: String, subgraph: &LifelineSubGraph) -> Result<Vec<String>, String> {
-        let a = subgraph.vertices.get(&start);
-        let b = subgraph.vertices.get(&end);
-        if a.is_none() || b.is_none() {
-            return Err(String::from("start or end does not exist."));
-        }
-        let start_un = a.unwrap();
-        let end_un = b.unwrap();
-
-        let mut paths:HashMap<String, (Vec<String>, i64)> = HashMap::new();
-        let mut finished = false;
-        let mut lowest_score: (Vec<String>, i64) = (vec!(end.clone()), 0);
-        // while !finished {
-        //     //TODO
-
-        // }
-        Ok(vec!())
-
-    }
+    
 
 
      /**
@@ -291,32 +281,22 @@ impl LifelineSubGraph {
         to_return
     }
 
-    pub fn empty() -> LifelineSubGraph {
-        LifelineSubGraph {
-            top_level_txcount_cutoff: 0,
-            top_level: String::from(""),
-            current_index: -1,
-            lastest_and_top_connected: false,
-            vertices: HashMap::new(),
-            petgraph: petgraph::graph::DiGraph::new()
-        } 
-    }
-
-
-   
-
+    // pub fn empty() -> LifelineSubGraph {
+    //     LifelineSubGraph {
+    //         top_level_txcount_cutoff: 0,
+    //         top_level: String::from(""),
+    //         current_index: -1,
+    //         lastest_and_top_connected: false,
+    //         vertices: HashMap::new(),
+    //         petgraph: petgraph::graph::DiGraph::new(),
+    //         node_indexes: HashMap::new()
+    //     } 
+    // }
 
     pub fn load(storage:Rc<dyn Persistence>) -> Result<LifelineSubGraph, String>  {
         let _r = storage.get_generic_cache(crate::indexstorage::P_CACHE_LIFELINE_SUBGRAPH);
         if _r.is_none() {
-            return Ok(LifelineSubGraph {
-                top_level_txcount_cutoff: 0,
-                top_level: String::from(""),
-                current_index: -1,
-                lastest_and_top_connected: false,
-                vertices: HashMap::new(),
-                petgraph: petgraph::graph::DiGraph::new()
-            } );
+            return Ok(LifelineSubGraph::default());
         }
         let mut result: LifelineSubGraph = serde_json::from_slice(&_r.unwrap()).expect("Lifeline data to be correct");
         //result.reload_pathfinding();

@@ -90,7 +90,7 @@ impl RocksDBProvider {
             FOLLOWED_TW_INDEX_RANGE_COLUMN_cache: Mutex::new(LruCache::new(SETTINGS.cache_settings.db_memory_cache as usize)),
             LAST_PICKED_TW_cache: Mutex::new(None),
             FOLLOWED_TW_INDEX_COLUMN_cache: Mutex::new(LruCache::new(SETTINGS.cache_settings.db_memory_cache as usize)),
-            LIFELINE_SUBGRAPH: Mutex::new(LifelineSubGraph::empty())
+            LIFELINE_SUBGRAPH: Mutex::new(LifelineSubGraph::default())
         };
         toReturn.load_subgraph();
         toReturn
