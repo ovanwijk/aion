@@ -99,6 +99,7 @@ pub async fn timewarpstateFn(req:HttpRequest, data: web::Data<APIActors>) ->  Re
     if a.is_some(){
         let mut a_ = a.unwrap();
         a_.latest_private_key = vec!();
+        a_.seed = String::default();
         Ok(HttpResponse::Ok()
  .content_type("application/json")
  .body( serde_json::to_string_pretty(&a_).unwrap()))

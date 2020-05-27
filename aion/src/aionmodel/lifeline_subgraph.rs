@@ -30,6 +30,33 @@ pub struct GraphVertex {
     pub timestamp:i64
 }
 
+impl GraphVertex {
+    pub fn closest_reference_me(&self) -> String {
+        let mut to_return = String::new();
+        let mut distance:i64 = 999999999999;        
+        for (k,v) in self.reference_me.iter() {
+            if v.tx_distance < distance {
+                to_return = k.clone();
+                distance = v.tx_distance.clone();
+            }
+        }
+        to_return
+    }
+
+    pub fn sorted_reference_me(&self) -> Vec<(String, GraphEdge)> {
+        let mut ret:Vec<(String, GraphEdge)> = self.reference_me.iter().map(|(k,v)| (k.clone(),v.clone())).collect();
+        ret.sort_by(|a, b| a.1.tx_distance.partial_cmp(&b.1.tx_distance).unwrap());
+        ret
+    }
+
+    pub fn sorted_i_reference(&self) -> Vec<(String, GraphEdge)> {
+        let mut ret:Vec<(String, GraphEdge)> = self.i_reference.iter().map(|(k,v)| (k.clone(),v.clone())).collect();
+        ret.sort_by(|a, b| a.1.tx_distance.partial_cmp(&b.1.tx_distance).unwrap());
+        ret
+
+    }
+}
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GraphEdge {   

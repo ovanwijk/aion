@@ -6,7 +6,7 @@ use crate::indexstorage::rocksdb_impl::*;
 
 impl TimewarpDetectionPersistence for RocksDBProvider {
 
-    fn tw_detection_add_decision_data(&self, tw:  crate::timewarping::Timewarp) -> TimewarpData { 
+    fn tw_detection_add_decision_data(&self, tw: crate::timewarping::Timewarp) -> TimewarpData { 
         let previous = self.tw_detection_get_decision_data(tw.target_hash().to_string());
         let tostore = if previous.is_some() {
             let advanced = previous.unwrap().advance(&tw);
@@ -15,7 +15,7 @@ impl TimewarpDetectionPersistence for RocksDBProvider {
         }else{
             info!("New timewarp: {}", tw.source_hash.clone());
             TimewarpData {
-                timewarpid: tw.source_hash.clone()[0..9].to_string(),
+                timewarpid: tw.source_tag.clone()[16..24].to_string(),
                 hash: tw.source_hash.clone(),
                 branch: tw.source_branch,
                 trunk: tw.source_trunk,

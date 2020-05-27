@@ -24,12 +24,6 @@ impl PullJobsPersistence for RocksDBProvider {
         }
     }
 
-
-  
-
-
-
-
     fn add_pull_job(&self, job:&PullJob) {
         let handle = self.provider.cf_handle(PULLJOB_ID_COLUMN).unwrap();
         let index_handle = self.provider.cf_handle(PERSISTENT_CACHE).unwrap();

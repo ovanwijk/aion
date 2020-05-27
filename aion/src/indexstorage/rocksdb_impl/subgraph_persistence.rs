@@ -131,6 +131,71 @@ impl RocksDBProvider {
         Ok(())
     }
 
+
+    fn find_include(&self, start:&String, target: &String, exit: &String) -> bool {
+            let mut latest = start.clone();
+            loop {
+                let ll_data = match self.get_lifeline_tx(&latest) {
+                    Some(v) => v,
+                    None => {error!("Expect reference to exist");return false;}
+                };
+                //let next_data = ;
+                match ll_data.walk_towards(&target) {
+                    None =>  {error!("Expect reference to exist");return false;},
+                    Some(data) => {
+                        if &data.connecting_timewarp == exit {
+                            return true;
+                        }
+                        if &data.connecting_timewarp == target {
+                            return false;
+                        }
+                        latest = data.connecting_timewarp;
+                    }
+                }
+            }
+        
+    }
+
+    fn get_newer_subgraph_tx(&self, ll:&LifeLineData, subgraph: &std::sync::MutexGuard<'_, LifelineSubGraph>) -> Option<String> {
+      
+        let closest = match ll.walk_to_closest() {
+            Some(v) => v.clone(),
+            None => return None
+        };
+      
+        //let subgraph = self.LIFELINE_SUBGRAPH.lock().unwrap();
+        let closest_sg_node = match subgraph.vertices.get(&closest.oldest_tx) {
+            Some(v) => {
+                v.clone()
+            },
+            None => return None
+        };
+         
+        //No need to do walks if there is only a single reference
+        if closest_sg_node.reference_me.len() == 1 {
+            return closest_sg_node.reference_me.keys().cloned().next();
+        }
+        info!("Walking to check TX include in path.");
+        //Note: might require a rework, now it tries to walk each time. Might be worth updating life line entries between each new subgraph entry.
+        for (k_source, _edge) in closest_sg_node.sorted_reference_me().iter() {
+            match subgraph.vertices.get(k_source) {
+                Some(v) => {
+                    for (k_target, _t_edge) in v.sorted_i_reference().iter() {
+                        if k_target == &closest.oldest_tx {
+                            if self.find_include(k_source, &closest.oldest_tx, &ll.timewarp_tx) {
+                                return Some(k_source.clone());
+                            }
+
+                        }
+                    }                    
+                },
+                None => return None
+            };
+        };
+        None
+    }
+  
+
 }
 
 impl SubgraphPersistence for RocksDBProvider {
@@ -149,15 +214,43 @@ impl SubgraphPersistence for RocksDBProvider {
     }
     
 
-    fn get_path(&self, start:String, end:String) -> Result<Vec<PinDescriptor>, String> {
+    fn get_subgraph_path(&self, start:String, end:String) -> Result<Vec<PinDescriptor>, String> {
         let subgraph = self.LIFELINE_SUBGRAPH.lock().unwrap(); 
         //subgraph.
-        let end_index = subgraph.node_indexes.get(&end).unwrap();
-        let start_index = subgraph.node_indexes.get(&start).unwrap().clone();
+   
+        let ll_start = match self.get_lifeline_tx(&start) {
+            Some(v) => v,
+            None => return Err(String::from("Start is not a lifeline transaction"))
+        };
+ 
+        let ll_end = match self.get_lifeline_tx(&start) {
+            Some(v) => v,
+            None => return Err(String::from("End is not a lifeline transaction"))
+        };
+      
+        let end_index = match subgraph.node_indexes.get(&end) {
+            Some(end_i) => end_i,
+            None => match ll_end.walk_to_closest() {
+                Some(v) => subgraph.node_indexes.get(&v.oldest_tx).expect("Subgraph node to exists"),
+                None => return Err(String::from("End does not walk to any subgraph TX"))
+            }
+        };
+   
+        let start_index = match subgraph.node_indexes.get(&start) {
+            Some(start_i) => start_i,
+            None => {  match self.get_newer_subgraph_tx(&ll_start, &subgraph) {
+                Some(v) => subgraph.node_indexes.get(&v).expect(""),
+                None => return Err(String::from("End is not a lifeline transaction"))
+                }
+            }
+        };
+        
+         // let end_index = subgraph.node_indexes.get(&end).unwrap();
+        // let start_index = subgraph.node_indexes.get(&start).unwrap().clone();
         //let b:&Graph<String, i64> = &subgraph.petgraph.clone();
         
         //let result =  // petgraph::algo::dijkstra(&subgraph.petgraph, start_index , Some(*end_index), |e| *e.weight());
-        let result = petgraph::algo::astar(&subgraph.petgraph, start_index ,
+        let result = petgraph::algo::astar(&subgraph.petgraph, start_index.clone() ,
           |finsihed| &finsihed == end_index, |e| *e.weight(),  |_| 0);
         if result.is_some() {
             let ab = result.unwrap();
@@ -166,12 +259,20 @@ impl SubgraphPersistence for RocksDBProvider {
             let mut iter = res.iter();
             let mut prev = iter.next().unwrap().clone();
             for s in iter {
-                to_return.push(self.get_pull_job_cache(prev.clone(), s.clone()).expect("The cache to be filled"));
+                let mut pin_desc = self.get_pull_job_cache(prev.clone(), s.clone()).expect("The cache to be filled");
+                match to_return.last() {
+                    Some(v) => pin_desc.dependant = v.id(),
+                    None => {}
+                };
+                to_return.push(pin_desc);
                 prev = s.clone();
+            }
+            if to_return.len() == 1 {
+                return Ok(vec!());
             }
             return Ok(to_return);
         }
-        Err(String::new())
+        Err(String::from("This shouldn't happen"))
     }
 
 

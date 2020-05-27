@@ -37,14 +37,20 @@ pub async fn subgraphFn(data: web::Data<APIActors>) ->  Result<HttpResponse, Err
 #[get("/subgraph/connect/{start}/{end}")]
 pub async fn subgraphConnectFn(info: web::Path<(String, String)>,data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
     //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
-    let start = data.storage.get_lifeline_tx(&info.0);
-    let end = data.storage.get_lifeline_tx(&info.1);
-    if start.is_none() || end.is_none() {
-        return Ok(HttpResponse::BadRequest().body("{\"error\" : \"Start or end not a  lifeline transaction\"}"));
-    }
-    let start_un = start.unwrap();
-    let end_un = end.unwrap();
-    let timewarp_path = data.storage.get_path(info.0.clone(), info.1.clone()).expect("To return a result");
+    let start = match data.storage.get_lifeline_tx(&info.0) {
+        Some(v) => v,
+        None => return Ok(HttpResponse::BadRequest().body("{\"error\" : \"Start is not a lifeline transaction\"}"))
+    };
+    let end = match data.storage.get_lifeline_tx(&info.1) {
+        Some(v) => v,
+        None => return Ok(HttpResponse::BadRequest().body("{\"error\" : \"End is not a lifeline transaction\"}"))
+    };
+    //let subgraph = data.storage.LIFELINE_SUBGRAPH.lock();
+  
+
+    info!("Calling subgraph connect");
+
+    let timewarp_path = data.storage.get_subgraph_path(info.0.clone(), info.1.clone()).expect("To return a result");
     
 
 

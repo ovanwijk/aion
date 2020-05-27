@@ -26,7 +26,7 @@ use crate::timewarping::signing;
 pub struct StartTimewarpWalking {
     pub source_hash: String,
     pub source_timestamp: i64,
-    //pub source_tag: String,
+    pub source_tag: String,
     pub source_branch: String,
     pub source_trunk: String,
     //pub source_signature: String,
@@ -54,7 +54,7 @@ impl Default for StartTimewarpWalking {
             source_hash:String::from(""),
             source_branch:String::from(""),
             source_trunk:String::from(""),
-           // source_tag:String::from(""),
+            source_tag:String::from(""),
            // source_signature:String::from(""),
             distance: 0,
             source_timestamp:0,
@@ -141,6 +141,7 @@ impl TimewarpWalker {
             source_hash: timewalk.source_hash.clone(),
             source_timestamp: timewalk.source_timestamp,
             distance: timewalk.distance,
+            source_tag: timewalk.source_tag.clone(),
             source_branch: timewalk.source_branch.clone(),
             source_trunk: timewalk.source_trunk.clone(),                                
             trunk_or_branch: timewalk.trunk_or_branch
@@ -196,6 +197,7 @@ impl TimewarpWalker {
                                 source_hash: txid.clone(),
                                 source_timestamp: timestamp,
                                 distance: diff,
+                                source_tag: tx.tag.clone(),
                                 source_branch: tx.branch_transaction.clone(),
                                 source_trunk: tx.trunk_transaction.clone(),                                
                                 trunk_or_branch: timewalk.trunk_or_branch

@@ -121,6 +121,7 @@ impl TimewarpIndexing {
                         source_branch: tx.branch_transaction.clone(),
                         source_trunk: tx.trunk_transaction.clone(),
                         source_timestamp: tx.attachment_timestamp,
+                        source_tag: tx.tag.clone(),
                         distance: diff,
                         trunk_or_branch: false
                     })
@@ -148,6 +149,7 @@ impl TimewarpIndexing {
                         source_branch: tx.branch_transaction.clone(),
                         source_trunk: tx.trunk_transaction.clone(),
                         source_timestamp: tx.attachment_timestamp,
+                        source_tag: tx.tag.clone(),
                         distance: diff,
                         trunk_or_branch: true
                     })
@@ -324,6 +326,7 @@ impl TimewarpIndexing {
                         source_hash: cpy.hash, 
                         source_branch: cpy.branch_transaction,
                         source_trunk: cpy.trunk_transaction,
+                        source_tag: cpy.tag,
                         distance: tw.distance,
                         source_timestamp: cpy.attachment_timestamp, 
                         trunk_or_branch: tw.trunk_or_branch,

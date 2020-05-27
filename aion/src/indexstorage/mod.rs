@@ -153,7 +153,7 @@ pub trait SubgraphPersistence: Send + Sync + std::fmt::Debug {
     fn new_index(&self) -> i64;
     fn clone_state(&self) -> LifelineSubGraph;
     fn reload_pathfinding(&self);
-    fn get_path(&self, start:String, end:String) -> Result<Vec<PinDescriptor>, String>;
+    fn get_subgraph_path(&self, start:String, end:String) -> Result<Vec<PinDescriptor>, String>;
     //fn split_edge(&mut self, event: GraphEntryEvent);
 }
 
@@ -338,6 +338,19 @@ impl LifeLineData {
             }
         }
         None
+    }
+
+   
+
+    pub fn walk_to_closest(&self) -> Option<LifeLinePathData> {
+       
+        let mut to_return:Option<LifeLinePathData> = None;
+        for path in &self.paths {
+            if to_return.is_none() || &to_return.clone().unwrap().transactions_till_oldest > &path.transactions_till_oldest {
+                to_return = Some(path.clone());
+            }
+        }
+        to_return
     }
 
   

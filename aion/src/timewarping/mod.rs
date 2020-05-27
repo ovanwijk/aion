@@ -44,6 +44,7 @@ pub struct Timewarp {
     pub source_branch: String,
     pub source_trunk: String,
     pub source_timestamp:i64,
+    pub source_tag: String,
 
     pub distance:i64, //timestamp difference
     pub trunk_or_branch:bool
