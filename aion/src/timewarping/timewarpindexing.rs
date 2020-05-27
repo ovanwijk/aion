@@ -302,18 +302,13 @@ impl TimewarpIndexing {
                                 (format!("{}{}", TIMEWARP_ID_PREFIX, tw_data.timewarpid), tw_data.hash.to_string())
                             ]);
 
-                        // self.storage.tw_detection_add_decision_data(tw.clone());
-                        // self.storage.tw_detection_add_to_index(get_time_key(&cpy.attachment_timestamp),
-                        //     vec![(tw.source_hash.to_string(), tw.target_hash().to_string())]);
                     }else{
                         info!("Caching lagging timewarp. {}", tw.source_hash.to_string());
 
                         let vec_to_add = self.known_active_walks.get_mut(unwrapped).expect("The key to be there");
                         //Todo how do I fix borrowing issues here?
                         self.known_timewarp_tips.insert(tw.source_hash.to_string(), unwrapped.to_string());
-                        self.known_timewarp_tips.remove(tw.target_hash());                                               
-                        
-                        
+                        self.known_timewarp_tips.remove(tw.target_hash());
                         vec_to_add.push(tw.clone());
                     }
                    

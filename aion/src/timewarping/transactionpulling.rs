@@ -221,7 +221,10 @@ impl TransactionPulling {
                     if !pinned_trytes.is_err() {
                         //TODO update ll_comp
                         for ll_data in  ll_results {
-                            self.storage.prepend_to_lifeline(ll_data);
+                            match self.storage.prepend_to_lifeline(ll_data) {
+                                Err(e) => {error!("Prepend lifeline {}", e.to_string())},
+                                _ => {}
+                            };
                         }
                         self.storage.update_pull_job(&unwrapped_job);
                     }else{
@@ -236,16 +239,22 @@ impl TransactionPulling {
                 //TODO add event to subgraph
                 if unwrapped_job.lifeline_component.is_some() {
                     let ll_comp_un = unwrapped_job.lifeline_component.unwrap();
-                    
+                    let tx_cutoff = match (&ll_comp_un.between_start, &ll_comp_un.between_end) {
+                        (Some(s), Some(e)) => {
+                            Some(unwrapped_job.pathway.tx_count as i64 - self.storage.get_lifeline_tx(s).expect("LL tx to exist").walk_towards(e).unwrap().transactions_till_oldest as i64)
+                        },
+                        _ => None
+                    };
                     let _r = self.storage.process_event(GraphEntryEvent {
                         between_end: ll_comp_un.between_end,
                         between_start: ll_comp_un.between_start,
+                        between_tx_split: tx_cutoff,
                         index: self.storage.new_index(),
                         target_tx_id: ll_comp_un.lifeline_end_tx.clone(),
                         txid: ll_comp_un.lifeline_start_tx.clone(),
                         timestamp: ll_comp_un.lifeline_start_ts.clone(),
                         target_timestamp: ll_comp_un.lifeline_end_ts.clone(),
-                        tx_distance_count: 0, // TODO
+                        tx_distance_count: unwrapped_job.pathway.tx_count as i64, // TODO
     
                     });
                 }                

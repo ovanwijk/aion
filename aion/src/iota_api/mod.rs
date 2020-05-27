@@ -2,6 +2,7 @@ use reqwest;
 use std::collections::{HashMap, HashSet};
 //use futures::future;
 use serde_json;
+use crate::SETTINGS;
 //use log;
 use reqwest::StatusCode;
 use crate::pathway::*;
@@ -104,6 +105,13 @@ impl BTtx {
             (None, Some(_b)) => crate::pathway::_T,
         }
     } 
+}
+
+
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LastPickedWebResult {
+    last_picked_timewarp : crate::indexstorage::TimewarpData
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -210,6 +218,36 @@ impl PathfindingResult {
 
         to_return
     }
+}
+
+pub fn get_preffered_timewarp() -> Option<String> {
+    if !SETTINGS.lifeline_settings.enable_leader {
+        return None
+    } 
+    let client = reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(30)).build().expect("Client builder to work");
+    let res = client.get(format!("{}/timewarp/picked", SETTINGS.lifeline_settings.aion_leader_endpoint).as_str())
+        .header("ContentType", "application/json")
+        .send();
+    if res.is_err() {
+        return None
+    }
+    let res = res.unwrap().error_for_status();
+
+    if res.is_err() {
+        return None
+    }
+    let result_text = match res.unwrap().text() {
+        Ok(v) => v,
+        Err(_) => return None
+    };
+
+    let response: Result<LastPickedWebResult, serde_json::Error> = serde_json::from_str(&result_text);
+    if response.is_err() {
+        return None
+    }
+    Some(response.unwrap().last_picked_timewarp.timewarpid)
 }
 
 pub fn pin_transaction_hashes(node:String, tx_hashes:Vec<String> ) -> Result<Vec<bool>, reqwest::Error> {

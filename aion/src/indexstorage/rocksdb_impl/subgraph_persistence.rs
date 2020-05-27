@@ -28,7 +28,7 @@ impl RocksDBProvider {
             (None, None) => return Ok(()),
             (Some(bs), Some(es)) => {/* Just continue the function */},
         };
-        let between_start = event.between_end.clone().unwrap();
+        let between_start = event.between_start.clone().unwrap();
         let old_end = event.between_end.clone().unwrap();
         let new_end = event.txid.clone();
 
@@ -208,11 +208,39 @@ impl SubgraphPersistence for RocksDBProvider {
         self.LIFELINE_SUBGRAPH.lock().unwrap().clone()
     }
 
+    fn is_in_graph(&self, start: &String) -> bool {
+        self.LIFELINE_SUBGRAPH.lock().unwrap().vertices.contains_key(start)
+    }
+
     fn store_state(&self) -> Result<(), String> {
         let _r = self.set_generic_cache(crate::indexstorage::P_CACHE_LIFELINE_SUBGRAPH, serde_json::to_vec(&self.LIFELINE_SUBGRAPH.lock().unwrap().clone()).unwrap());
         _r
     }
-    
+    fn get_between_subgraph(&self, start:&String) -> Result<(Option<String>, Option<String>), String> {
+        let subgraph = self.LIFELINE_SUBGRAPH.lock().unwrap(); 
+        let ll_start = match self.get_lifeline_tx(start) {
+            Some(v) => v,
+            None => return Err(String::from("Start is not a lifeline transaction"))
+        };
+      
+        let oldest = match subgraph.node_indexes.get(start) {
+            Some(end_i) => return Ok((Some(start.clone()), None)),
+            None => match ll_start.walk_to_closest() {
+                Some(v) => (v.oldest_tx.clone(), subgraph.vertices.get(&v.oldest_tx).expect("Subgraph node to exists")),
+                None => return Err(String::from("End does not walk to any subgraph TX"))
+            }
+        };
+        if oldest.1.reference_me.is_empty() {
+            return Err(String::from("Lifeline is still in 'live' phase. Use a lifeline that is reachable from the top node of "));
+        }
+        match self.get_newer_subgraph_tx(&ll_start, &subgraph) {
+                Some(v) => return Ok(
+                    (Some(v.clone()), Some(oldest.0.clone()))
+                ),
+                None => return Err(String::from("Shouldn't happen"))
+        }            
+        
+    }
 
     fn get_subgraph_path(&self, start:String, end:String) -> Result<Vec<PinDescriptor>, String> {
         let subgraph = self.LIFELINE_SUBGRAPH.lock().unwrap(); 
@@ -267,9 +295,9 @@ impl SubgraphPersistence for RocksDBProvider {
                 to_return.push(pin_desc);
                 prev = s.clone();
             }
-            if to_return.len() == 1 {
-                return Ok(vec!());
-            }
+            // if to_return.len() == 1 {
+            //     return Ok(vec!());
+            // }
             return Ok(to_return);
         }
         Err(String::from("This shouldn't happen"))

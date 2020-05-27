@@ -21,6 +21,7 @@ pub struct CreateStorageRequest {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateStorageReponse {
+    pub timestamp: i64,
     pub start: String,
     pub pathway: crate::pathway::PathwayDescriptor,
     pub node: String,
@@ -54,78 +55,22 @@ impl Default for CreateStorageReponse {
             pathway: crate::pathway::PathwayDescriptor::new(),
             node: String::from(""),
             endpoints: vec!(),
-            dependant: String::from("")
+            dependant: String::from(""),
+            timestamp: 0
         }
     }
 }
 
-
-#[post("/store/connect_storage_object")]
-pub async fn connect_storage_object_fn(info: web::Json<CreateStorageReponse>, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
-    let r = data.storage.get_lifeline_tx(&info.start.clone());
-    //if it connects to a lifeline already just return the object.
-    if r.is_some() {
-        return Ok(HttpResponse::Ok()
-        .content_type("application/json")
-        .body(serde_json::to_string_pretty(&info.into_inner()).unwrap()));
-    }
-
-    let mut t = std::time::Instant::now();
-    let node = if info.node == "" { SETTINGS.node_settings.iri_connection() } else {info.node.clone()};
-    let mut iota = iota_client::Client::new(&node); //TODO get from settings  
-
-    let iota_trytes = iota.get_trytes(&[info.start.clone()]);
-    let tx_trytes = &iota_trytes.unwrap_or_default().take_trytes().unwrap_or_default()[0];
-    let tx:Transaction = crate::aionmodel::transaction::parse_tx_trytes(&tx_trytes, &info.start.clone());
-    println!("Getting transaction took: {}", t.elapsed().as_millis());
-    t = std::time::Instant::now();
-    //crate::iota_api::find_paths(&node, start: String, endpoints: Vec<String>);
-    let r = if crate::now() - 180 > tx.timestamp { data.storage.get_lifeline_ts(&(tx.timestamp + 180)) }else {data.storage.get_last_lifeline()};
-    println!("Getting lifeline took: {}", t.elapsed().as_millis());
-    t = std::time::Instant::now();
-    if r.is_some() {
-
-        let start = r.unwrap().timewarp_tx;
-        let object_found = crate::iota_api::find_paths_async(node.to_string(), start.clone(), vec!(info.start.clone())).await;
-        println!("Find path took: {}", t.elapsed().as_millis());
-        t = std::time::Instant::now();
-        if !object_found.is_err() {
-            let mut pathway =  object_found.unwrap().to_pathway(start.clone());
-            //extend the pathway found to the one given.
-            pathway.append(info.pathway.clone());
-
-            println!("Pathway transform took: {}", t.elapsed().as_millis());
-            t = std::time::Instant::now();
-        
-            
-            let json_text = serde_json::to_string_pretty(&ReturnData {
-                data: CreateStorageReponse{
-                    start: start,
-                    pathway: pathway,
-                    node: String::from(""),
-                    endpoints: info.endpoints.clone(),
-                    dependant: info.dependant.clone(),
-                }});
-                println!("Json took: {}", t.elapsed().as_millis());
-
-            return Ok(HttpResponse::Ok()
-            .content_type("application/json")
-            .body(json_text.unwrap()));
-        }
-    }
-    Ok(HttpResponse::NotFound().body(""))
-   
-}
 
 
 #[get("/store/{pinid}")]
 pub async fn get_storage_object_fn(info: web::Path<String>, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
     let inner = info.into_inner();
-    let key = base64::decode_config(&inner, base64::URL_SAFE).unwrap();
+    
     let pull_job = data.storage.get_pull_job(&inner);
     
     if pull_job.is_none() {
-        let pin_desc = data.storage.get_pin_descriptor(key);
+        let pin_desc = data.storage.get_pin_descriptor(&inner);
         if pin_desc.is_none() {
             return Ok(HttpResponse::NotFound()
             .content_type("application/json")
@@ -228,7 +173,8 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
     t = std::time::Instant::now();
     if r.is_some() {
 
-        let start = r.unwrap().timewarp_tx;
+        let ll_unwrapped = r.unwrap();
+        let start = ll_unwrapped.timewarp_tx;
         let object_found = crate::iota_api::find_paths_async(node.to_string(), start.clone(), info.hashes.clone()).await;
         println!("Find path took: {}", t.elapsed().as_millis());
         t = std::time::Instant::now();
@@ -241,6 +187,7 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
                 data: CreateStorageReponse{
                     start: start,
                     pathway: pathway,
+                    timestamp: ll_unwrapped.timestamp,
                     node: String::from(""),
                     endpoints: info.hashes.clone(),
                     dependant: String::from(""),

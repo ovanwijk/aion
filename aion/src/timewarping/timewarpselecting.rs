@@ -226,6 +226,7 @@ impl TimewarpSelecting {
     }
 
     fn best_timewarp(&self, warps: &Vec<TimewarpData>) -> TimewarpData {
+        let leader = crate::iota_api::get_preffered_timewarp();
         let mut selected =  &TimewarpData{
             timewarpid: String::new(),
             hash: String::new(),
@@ -239,7 +240,7 @@ impl TimewarpSelecting {
             index_since_id: 0,
         };
         //warps.first().expect("At least one element");
-        
+        let mut leader_selected = false;
         for x in warps {
             let score_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.timewarpid == x.timewarpid { 0}else {
                 SETTINGS.timewarp_index_settings.detection_threshold_switch_timewarp_in_seconds as isize
@@ -247,9 +248,19 @@ impl TimewarpSelecting {
             let selected_sub = if self.picked_timewarp.is_some() && self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.timewarpid == selected.timewarpid { 0}else {
                 SETTINGS.timewarp_index_settings.detection_threshold_switch_timewarp_in_seconds as isize
             };
-            if x.score() - score_sub  
+            if !leader_selected && x.score() - score_sub  
                 > selected.score() -  selected_sub {
                 selected = x;
+            }
+            match &leader {
+                Some(v) => {
+                    if &x.timewarpid == v {
+                        info!("Leader selected for tw {}", v);
+                        selected = x;
+                        leader_selected = true;
+                    }
+                },
+                None => {}
             }
         }
         selected.clone()

@@ -20,6 +20,7 @@ pub struct GraphEntryEvent {
     pub target_timestamp: i64,
     pub between_start: Option<String>,
     pub between_end: Option<String>,
+    pub between_tx_split: Option<i64>
 }
 
 
@@ -163,38 +164,60 @@ impl LifelineSubGraph {
      pub fn split_edge(event: &GraphEntryEvent, subgraph:&mut LifelineSubGraph) {
         let start = subgraph.vertices.get_mut(&event.between_start.clone().unwrap()).expect("");
         
+
+        //Adjust A
         //Update top node A to reference X
         let _old_end = start.i_reference.remove(&event.between_end.clone().unwrap()).unwrap();
         start.i_reference.insert(event.txid.clone(), GraphEdge {
-            tx_distance: 0, //TODO, implement tx distance calculation event.tx_distance_count.clone(),
+            tx_distance: _old_end.tx_distance - event.between_tx_split.unwrap(), 
             time_distance: event.timestamp - event.target_timestamp
         });
-        // Insert X (reference_me: A)
-        let mut ref_me = HashMap::new();
-        ref_me.insert(event.between_start.clone().unwrap(), GraphEdge{
-            tx_distance: 0, // event.tx_distance_count.clone(),
-            time_distance: start.timestamp - event.timestamp
-        });
+       
+        //End A
+
         //  (i_reference, X & D)
         //X
-        let mut i_ref = HashMap::new();
-        i_ref.insert(event.target_tx_id.clone(), GraphEdge{
-            tx_distance:0, // event.tx_distance_count.clone(),
+
+         // Insert X (reference_me: A)
+         let mut x_ref_me = HashMap::new();
+         x_ref_me.insert(event.between_start.clone().unwrap(), GraphEdge{
+             tx_distance: _old_end.tx_distance - event.between_tx_split.unwrap(),
+             time_distance: start.timestamp - event.timestamp
+         });
+
+         // Reference Y
+        let mut x_i_ref = HashMap::new();
+        x_i_ref.insert(event.target_tx_id.clone(), GraphEdge{
+            tx_distance: event.tx_distance_count.clone(),
             time_distance: event.timestamp - event.target_timestamp
         });
 
         {//Mutable borrow scope
             let end = subgraph.vertices.get_mut(&event.between_end.clone().unwrap()).expect("");
             //D
-            i_ref.insert(event.between_end.clone().unwrap(), GraphEdge{
-                tx_distance:0, // event.tx_distance_count.clone(),
+            x_i_ref.insert(event.between_end.clone().unwrap(), GraphEdge{
+                tx_distance: event.between_tx_split.unwrap(),
                 time_distance: event.timestamp - end.timestamp
             });
         }
+
+        // Insert X
         subgraph.vertices.insert(event.txid.clone(), GraphVertex {
-            reference_me: ref_me,
-            i_reference: i_ref,
+            reference_me: x_ref_me,
+            i_reference: x_i_ref,
             timestamp: event.timestamp        
+        });
+
+        let mut y_ref_me = HashMap::new();
+         y_ref_me.insert(event.txid.clone(), GraphEdge{
+             tx_distance: event.tx_distance_count.clone(),
+             time_distance: event.timestamp - event.target_timestamp
+         });
+         // Insert Y
+         subgraph.vertices.insert(event.target_tx_id.clone(), GraphVertex {
+            reference_me: y_ref_me,
+            i_reference: HashMap::new(),
+            timestamp: event.target_timestamp        
         });
 
         let end = subgraph.vertices.get_mut(&event.between_end.clone().unwrap()).expect("");
@@ -202,7 +225,7 @@ impl LifelineSubGraph {
         // Update D to have reference_me as X instead of A
         let _old_end = end.reference_me.remove(&event.between_start.clone().unwrap()).unwrap();
         end.reference_me.insert(event.txid.clone(), GraphEdge {
-            tx_distance: 0, //TODO, implement tx distance calculation event.tx_distance_count.clone(),
+            tx_distance: event.tx_distance_count.clone(),
             time_distance: event.timestamp - end.timestamp
         });
 

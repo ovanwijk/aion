@@ -87,7 +87,9 @@ pub struct APISettings {
 #[derive(Clone, Debug, Deserialize)]
 pub struct LifelineSettings {
     subgraph_section_split_in_seconds: i64,
-    enable_hooks: bool
+    enable_hooks: bool,
+    enable_leader: bool,
+    aion_leader_endpoint: String
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -165,6 +167,8 @@ lazy_static! {
                 lifeline_settings: LifelineSettings {
                     enable_hooks: lconfig["lifeline"]["enable_hooks"].as_bool().unwrap(),
                     subgraph_section_split_in_seconds: lconfig["lifeline"]["subgraph_section_split_in_seconds"].as_i64().unwrap(),
+                    aion_leader_endpoint: lconfig["lifeline"]["aion_leader_endpoint"].as_string().unwrap(),
+                    enable_leader: lconfig["lifeline"]["enable_leader"].as_bool().unwrap()
                 },
                 node_settings: NodeSettings {
                     iri_host: lconfig["nodes"]["iri_api_host"].as_string().unwrap(),
@@ -344,7 +348,7 @@ async fn main() -> io::Result<()> {
             tw_selecting: tw_selection_actor.clone()
         })
         .wrap(DefaultHeaders::new().header("Access-Control-Allow-Origin", "*"))
-        .service(webapi::storage::connect_storage_object_fn)
+        //.service(webapi::storage::connect_storage_object_fn)
         .service(webapi::storage::create_storage_object_fn)
         .service(webapi::storage::get_storage_object_fn)
         .service(webapi::storage::store_storage_object_fn)
@@ -355,6 +359,8 @@ async fn main() -> io::Result<()> {
         .service(webapi::lifeline::lifelineLatestF)
         .service(webapi::subgraph::subgraphFn)
         .service(webapi::subgraph::subgraphConnectFn)
+        .service(webapi::subgraph::subgraphGetPathFn)
+        .service(webapi::subgraph::insert_subgraph_fn)
         .service(webapi::timewarpPickedFn)
         .service(webapi::timewarpstateFn)
         .service(webapi::timewarpsFn)

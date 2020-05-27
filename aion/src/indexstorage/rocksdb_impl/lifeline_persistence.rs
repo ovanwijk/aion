@@ -102,7 +102,6 @@ impl LifelinePersistence for RocksDBProvider {
     }
 
 
-    //TODO implement
     fn prepend_to_lifeline(&self, ll_data: LifeLineData) -> Result<(), String> {
         let _r = self.get_lifeline_tx(&ll_data.timewarp_tx);
         if _r.is_none() {
@@ -196,6 +195,7 @@ impl LifelinePersistence for RocksDBProvider {
                     ll_graph_events.push(GraphEntryEvent {
                         between_start: None,
                         between_end: Some(oldest_tx_ts_cnt.0.clone()),
+                        between_tx_split: None,
                         target_tx_id: oldest_tx_ts_cnt.0.clone(),
                         tx_distance_count: oldest_tx_ts_cnt.2, //TODO check if this is correct
                         index: self.new_index(),
@@ -243,6 +243,7 @@ impl LifelinePersistence for RocksDBProvider {
                 ll_graph_events.push(GraphEntryEvent {
                     between_end: None,
                     between_start: None,
+                    between_tx_split: None,
                     index: 0,
                     target_tx_id: "".to_string(),
                     txid: lifeline.timewarp_tx.clone(),

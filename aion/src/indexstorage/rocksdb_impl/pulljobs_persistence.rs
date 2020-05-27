@@ -13,7 +13,7 @@ impl PullJobsPersistence for RocksDBProvider {
             Ok(())
         }
     }
-    fn get_pin_descriptor(&self, id:Vec<u8>) -> Option<PinDescriptor> {
+    fn get_pin_descriptor(&self, id:&String) -> Option<PinDescriptor> {
         let handle = self.provider.cf_handle(PATHWAY_DESCRIPTORS).unwrap();
         
         match self.provider.get_cf(handle,  id) {                

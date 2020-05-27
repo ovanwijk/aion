@@ -154,6 +154,8 @@ pub trait SubgraphPersistence: Send + Sync + std::fmt::Debug {
     fn clone_state(&self) -> LifelineSubGraph;
     fn reload_pathfinding(&self);
     fn get_subgraph_path(&self, start:String, end:String) -> Result<Vec<PinDescriptor>, String>;
+    fn get_between_subgraph(&self, start:&String) -> Result<(Option<String>, Option<String>), String>;
+    fn is_in_graph(&self, start: &String) -> bool;
     //fn split_edge(&mut self, event: GraphEntryEvent);
 }
 
@@ -183,7 +185,7 @@ pub trait LifelinePersistence: Send + Sync + std::fmt::Debug {
 
 pub trait PullJobsPersistence {
     fn store_pin_descriptor(&self, pin_descriptor:PinDescriptor) -> Result<(), String>;
-    fn get_pin_descriptor(&self, id:Vec<u8>) -> Option<PinDescriptor>;
+    fn get_pin_descriptor(&self, id:&String) -> Option<PinDescriptor>;
 
     fn add_pull_job(&self, job:&PullJob);
     fn update_pull_job(&self, job:&PullJob);
