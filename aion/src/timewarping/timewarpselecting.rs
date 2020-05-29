@@ -89,7 +89,11 @@ impl TimewarpSelecting {
             return;
         }
         let best_tw = self.best_timewarp(&timewarps);
-        if self.picked_timewarp.is_none() {            
+        if self.picked_timewarp.is_none() {     
+            if best_tw.timewarpid.is_empty() {
+                info!("No timewarps yet");
+                return;
+            };
             self.picked_timewarp = Some(TimewarpSelectionState {
                 last_picked_timewarp: best_tw.clone(),
                 untransitioned_timewarp_heads: vec!()
@@ -98,6 +102,8 @@ impl TimewarpSelecting {
             
             self.store_newly_pick(best_tw.clone());
             self.storage.set_last_picked_tw(self.picked_timewarp.as_ref().unwrap().clone());
+
+            return
         }
         if self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.timewarpid != best_tw.timewarpid {
            
@@ -255,7 +261,10 @@ impl TimewarpSelecting {
             match &leader {
                 Some(v) => {
                     if &x.timewarpid == v {
-                        info!("Leader selected for tw {}", v);
+                        if self.picked_timewarp.is_some() && &self.picked_timewarp.as_ref().unwrap().last_picked_timewarp.timewarpid != v {
+                            info!("Leader selected for tw {}", v.clone());
+                        }
+                        
                         selected = x;
                         leader_selected = true;
                     }

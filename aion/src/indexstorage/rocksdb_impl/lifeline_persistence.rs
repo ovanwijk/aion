@@ -57,7 +57,7 @@ impl LifelinePersistence for RocksDBProvider {
             None}
         };
         if to_return.is_some() {
-            to_return.unwrap()
+            to_return.unwrap().iter().filter(|a| a.len() == 81).cloned().collect()
         }else{
             vec!()
         }
@@ -105,6 +105,7 @@ impl LifelinePersistence for RocksDBProvider {
     fn prepend_to_lifeline(&self, ll_data: LifeLineData) -> Result<(), String> {
         let _r = self.get_lifeline_tx(&ll_data.timewarp_tx);
         if _r.is_none() {
+            error!("Referncing transaction is not a lifeline transaction or the first lifeline data is not the referencing transaction. {}", ll_data.timewarp_tx);
             return Err(String::from("Referncing transaction is not a lifeline transaction or the first lifeline data is not the referencing transaction."));
         }
         let mut previous_ll = _r.unwrap();       
@@ -118,13 +119,28 @@ impl LifelinePersistence for RocksDBProvider {
             
             current_ll_time_index.insert(0, (path.connecting_timewarp.clone(), path.connecting_timestamp.clone()));
             
+            if self.get_lifeline_tx(&path.connecting_timewarp).is_none(){
+                match batch.put_cf(handle, path.connecting_timewarp.clone().as_bytes(), serde_json::to_vec(&path.connecting_empty_ll_data()).unwrap()) {
+                    Err(e) => return Err(format!(" path.connecting_timewarp.clone(): {}", e.to_string())),
+                    _ => {}
+                };
+            }
             //TODO handle errors
-            batch.put_cf(handle, path.connecting_timewarp.clone().as_bytes(), serde_json::to_vec(&path.connecting_empty_ll_data()).unwrap());
-            batch.put_cf(range_handle, current_time_key.to_be_bytes(), serde_json::to_vec(&current_ll_time_index).unwrap());
-            batch.put_cf(handle, ll_data.timewarp_tx.clone().as_bytes(), serde_json::to_vec(&ll_data).unwrap());
+        
+            match batch.put_cf(range_handle, current_time_key.to_be_bytes(), serde_json::to_vec(&current_ll_time_index).unwrap()){
+                Err(e) => return Err(format!(" current_time_key.to_be_bytes(): {}", e.to_string())),
+                _ => {}
+            };
+            match batch.put_cf(handle, ll_data.timewarp_tx.clone().as_bytes(), serde_json::to_vec(&ll_data).unwrap()){
+                Err(e) => return Err(format!(" ll_data.timewarp_tx.clone(): {}", e.to_string())),
+                _ => {}
+            };
         }
         
-        batch.put_cf(handle, previous_ll.timewarp_tx.clone().as_bytes(), serde_json::to_vec(&previous_ll).unwrap());
+        match batch.put_cf(handle, previous_ll.timewarp_tx.clone().as_bytes(), serde_json::to_vec(&previous_ll).unwrap()) {
+            Err(e) => return Err(format!(" previous_ll.timewarp_tx.clone(): {}", e.to_string())),
+            _ => {}
+        };
         
         
         let _l = self.provider.write(batch);
@@ -132,7 +148,7 @@ impl LifelinePersistence for RocksDBProvider {
         if _l.is_err() {
             return Err(format!("Something went wrong pre-pending lifeline: {}", _l.unwrap_err().to_string()))
         }
-        
+        //info!("Prepended lifeline tx {}", &ll_data.timewarp_tx);
         Ok(())
     }
     //TODO implement

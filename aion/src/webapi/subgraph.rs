@@ -58,7 +58,7 @@ pub async fn insert_subgraph_fn(info: web::Json<InsertSubgraph>, data: web::Data
                     match &first_item.lifeline_component {
                         Some(ll_comp) => {
                             match &ll_comp.between_start {
-                                Some(test_tx) => if !data.storage.is_in_graph(&test_tx) {
+                                Some(test_tx) => if !data.storage.is_in_graph(&test_tx) {                                 
                                     return Ok(HttpResponse::NotFound()
                                     .content_type("application/json")
                                     .body("{\"error\":\"Between_start transaction not in subgraph\"}"));

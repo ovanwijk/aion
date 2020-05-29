@@ -422,10 +422,19 @@ pub struct PullJobLifeline {
     pub lifeline_end_tx: String,
     pub lifeline_end_ts: i64,   
     pub lifeline_transitions: HashMap<i64, i64>, //First is the start index, second is the count. [3, 100]    
-    pub lifeline_prev: Option<(String, i64, String)>, //when walking a lifeline transition keep the orginal tx. TX, TS, TAG
+    pub lifeline_prev: Option<(String, i64, String, i64)>, //when walking a lifeline transition keep the orginal tx. TX, TS, TAG, distance
     pub lifeline_prev_index: Option<i64>, // only set when walking a longer distance.
     pub between_start: Option<String>, //Newest transaction id
     pub between_end: Option<String>, //Oldest transaction id.
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PulljobPrevCache {
+    pub tx: String,
+    pub ts: i64,
+    pub tag: String,
+    pub distance: i64,
+    
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

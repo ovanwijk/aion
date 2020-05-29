@@ -130,7 +130,7 @@ pub async fn timewarpPickedFn(req:HttpRequest, data: web::Data<APIActors>) ->  R
     //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
     
     let reply = webask::ask(data.actor_system.clone(), &data.tw_selecting.clone(), Protocol::WebRequest(WebRequestType::PickedTimewarp)).await;
-    info!("{:?}", reply);
+   
     match reply {
         Protocol::WebReply(__msg) => {
             Ok(HttpResponse::Ok()

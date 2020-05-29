@@ -86,7 +86,8 @@ impl RocksDBProvider {
                 let ll_data = self.get_lifeline_tx(&latest).expect("Reference to exist");
                 //let next_data = ;
                 match ll_data.walk_towards(&end) {
-                    None => return Err(String::from("No path to end")),
+                    None => 
+                        return Err(String::from("No path to end")),
                     Some(data) => {
                         
                         if data.connecting_pathway.tx_count > 1 {
@@ -129,6 +130,69 @@ impl RocksDBProvider {
             info!("Cached path {}->{} with {} transactions",  start.clone(), end.clone(), tx_count);
         }
         Ok(())
+    }
+
+    fn generate_pin_descriptor(&self,  start:&String, target: &String, end: &String) -> Result<PinDescriptor, String> {
+
+        let ll_start = match self.get_lifeline_tx(start) {
+            Some(v) => v,
+            None => return Err(String::from("Start is not a lifeline transaction"))
+        };
+
+        let ll_end = match self.get_lifeline_tx(end) {
+            Some(v) => v,
+            None => return Err(String::from("End is not a lifeline transaction"))
+        };
+
+        let ll_target = match self.get_lifeline_tx(target) {
+            Some(v) => v,
+            None => return Err(String::from("Terget is not a lifeline transaction"))
+        };
+
+            let mut pathway = PathwayDescriptor::new();
+            let mut finished = false;
+            let mut latest = start.clone();
+            let mut jump_points:HashMap<i64, i64> = HashMap::new();
+            while !finished {
+                let ll_data = self.get_lifeline_tx(&latest).expect("Reference to exist");
+                //let next_data = ;
+                match ll_data.walk_towards(end) {
+                    None => return Err(String::from("No path to end")),
+                    Some(data) => {
+                        
+                        if data.connecting_pathway.tx_count > 1 {
+                            jump_points.insert(pathway.tx_count as i64, data.connecting_pathway.tx_count as i64);
+                        }
+                        pathway.append(data.connecting_pathway);
+                        if &data.connecting_timewarp == end {
+                            finished = true;
+                        }
+                        latest = data.connecting_timewarp;
+                    }
+                }
+            }
+            let tx_count = pathway.tx_count.clone();
+            let to_return = PinDescriptor{
+                lifeline_tx: start.clone(),
+                timestamp: 0,
+                pathway: pathway,
+                metadata: String::new(),
+                dependant: String::new(),
+                endpoints: vec!(),
+                lifeline_component:Some(PullJobLifeline {
+                    between_end: None,
+                    between_start: None,
+                    lifeline_start_tx: start.clone(),
+                    lifeline_start_ts: ll_start.timestamp,
+                    lifeline_end_tx: end.clone(),
+                    lifeline_end_ts: ll_end.timestamp,
+                    lifeline_prev: None,
+                    lifeline_prev_index: None,
+                    lifeline_transitions: jump_points.clone()
+
+                })
+            };
+        Ok(to_return)
     }
 
 
@@ -209,7 +273,8 @@ impl SubgraphPersistence for RocksDBProvider {
     }
 
     fn is_in_graph(&self, start: &String) -> bool {
-        self.LIFELINE_SUBGRAPH.lock().unwrap().vertices.contains_key(start)
+        let re = self.LIFELINE_SUBGRAPH.lock().unwrap().vertices.contains_key(start);
+        re
     }
 
     fn store_state(&self) -> Result<(), String> {
@@ -251,18 +316,18 @@ impl SubgraphPersistence for RocksDBProvider {
             None => return Err(String::from("Start is not a lifeline transaction"))
         };
  
-        let ll_end = match self.get_lifeline_tx(&start) {
+        let ll_end = match self.get_lifeline_tx(&end) {
             Some(v) => v,
             None => return Err(String::from("End is not a lifeline transaction"))
         };
       
-        let end_index = match subgraph.node_indexes.get(&end) {
-            Some(end_i) => end_i,
+        let (end_index, end_tx) = match subgraph.node_indexes.get(&end) {
+            Some(end_i) => (end_i, end.clone()),
             None => match ll_end.walk_to_closest() {
-                Some(v) => subgraph.node_indexes.get(&v.oldest_tx).expect("Subgraph node to exists"),
+                Some(v) => (subgraph.node_indexes.get(&v.oldest_tx).expect("Subgraph node to exists"), v.oldest_tx.clone()),
                 None => return Err(String::from("End does not walk to any subgraph TX"))
             }
-        };
+        };/*
    
         let start_index = match subgraph.node_indexes.get(&start) {
             Some(start_i) => start_i,
@@ -272,6 +337,26 @@ impl SubgraphPersistence for RocksDBProvider {
                 }
             }
         };
+*/
+        let (start_index, start_tx) = match subgraph.node_indexes.get(&start) {
+            Some(start_i) => (start_i, start.clone()),
+            None => {  match ll_start.walk_to_closest() {
+                Some(v) => {
+                    (subgraph.node_indexes.get(&v.oldest_tx).expect(""), v.oldest_tx.clone())
+                },
+                None => return Err(String::from("End is not a lifeline transaction"))
+                }
+            }
+        };
+        let mut to_return:Vec<PinDescriptor> = vec!();
+        if start_tx != start {
+            to_return.push(match self.generate_pin_descriptor(&start, &start_tx, &start_tx) {
+                Ok(v) => v,
+                Err(e) => return Err(e)
+            });
+        };
+
+
         
          // let end_index = subgraph.node_indexes.get(&end).unwrap();
         // let start_index = subgraph.node_indexes.get(&start).unwrap().clone();
@@ -279,17 +364,22 @@ impl SubgraphPersistence for RocksDBProvider {
         
         //let result =  // petgraph::algo::dijkstra(&subgraph.petgraph, start_index , Some(*end_index), |e| *e.weight());
         let result = petgraph::algo::astar(&subgraph.petgraph, start_index.clone() ,
-          |finsihed| &finsihed == end_index, |e| *e.weight(),  |_| 0);
+          |finsihed| &finsihed == end_index, |e| std::cmp::max(1,*e.weight()),  |_| 0);
         if result.is_some() {
             let ab = result.unwrap();
             let res:Vec<String> =  ab.1.iter().map(|a| subgraph.node_indexes_reverse.get(a).unwrap().clone()).collect();
-            let mut to_return:Vec<PinDescriptor> = vec!();
+            
             let mut iter = res.iter();
             let mut prev = iter.next().unwrap().clone();
             for s in iter {
                 let mut pin_desc = self.get_pull_job_cache(prev.clone(), s.clone()).expect("The cache to be filled");
                 match to_return.last() {
-                    Some(v) => pin_desc.dependant = v.id(),
+                    Some(v) => {
+                        pin_desc.dependant = v.id();
+                        let mut a = pin_desc.lifeline_component.as_mut();
+                        a.unwrap().between_start = Some(pin_desc.lifeline_tx.clone());
+                        //pin_desc.lifeline_component = Some(a);
+                    },
                     None => {}
                 };
                 to_return.push(pin_desc);
