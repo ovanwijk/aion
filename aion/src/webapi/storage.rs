@@ -89,6 +89,62 @@ pub async fn get_storage_object_fn(info: web::Path<String>, data: web::Data<APIA
 }
 
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PullJobResults {
+    active: Vec<crate::indexstorage::PullJob>,
+    faulty: Vec<crate::indexstorage::PullJob>
+}
+
+#[get("/store/jobs")]
+pub async fn get_pin_jobs_fn( data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
+
+    let mut testdata = crate::indexstorage::PullJob{
+        id: "test".to_string(),
+        node: "http://localhost:8080".to_string(),
+        status: "await".to_string(),
+        last_update: crate::now() - 6000,
+        current_tx: "test".to_string(),
+        current_index: 0,
+        history: vec!(),
+        pathway: crate::pathway::PathwayDescriptor::trunk(),
+        lifeline_component: None,
+        dependant: String::default(),
+        validity_pre_check_tx: vec!(),
+    };
+    testdata.pathway.add_to_path(crate::pathway::_T);
+
+    let mut to_return = PullJobResults{
+        active:  vec!(),
+        faulty: vec!()
+    };
+    let pin_jobs:Vec<String> = match data.storage.get_generic_cache(crate::indexstorage::P_CACHE_PULLJOB) {
+        Some(value) => serde_json::from_slice(&*value).unwrap(),
+        None => vec!()
+    };
+    let faulty_pin_jobs:Vec<String> = data.storage.list_faulty_pull_jobs();
+    for pj in pin_jobs.iter() {        
+            match data.storage.get_pull_job(&pj) {
+                Some(j) => to_return.active.push(j),
+                _ => {}
+            };
+    }
+    for pj in faulty_pin_jobs.iter() {        
+        match data.storage.get_pull_job(&pj) {
+            Some(j) => to_return.faulty.push(j),
+            _ => {}
+        };
+    }
+
+   
+    
+    return Ok(HttpResponse::Ok()
+            .content_type("application/json")
+            .body(serde_json::to_string_pretty(&ReturnData {
+                data: to_return
+            }).unwrap()));
+}
+
+
 #[post("/store")]
 pub async fn store_storage_object_fn(info: web::Json<CreateStorageReponse>, data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
     let r = data.storage.get_lifeline_tx(&info.start.clone());
@@ -158,6 +214,11 @@ pub async fn create_storage_object_fn(info: web::Json<CreateStorageRequest>, dat
     let mut max:i64 = 0;
     for i in 0..tx_trytes.len() {
         transactions.push(crate::aionmodel::transaction::parse_tx_trytes(&tx_trytes[i], &info.hashes[i]));
+        if transactions[i].hash == "999999999999999999999999999999999999999999999999999999999999999999999999999999999" {
+            return Ok(HttpResponse::BadRequest().body(
+                format!("{{\"error\": \"Transaction {} not found\"}}", &info.hashes[i])));
+
+        }
         min = std::cmp::min(min, transactions[i].attachment_timestamp);
         max = std::cmp::max(max, transactions[i].attachment_timestamp);
     }

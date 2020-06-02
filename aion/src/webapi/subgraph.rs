@@ -146,11 +146,11 @@ pub async fn subgraphConnectFn(info: web::Path<String>,data: web::Data<APIActors
 #[get("/subgraph/getpath/{start}/{end}")]
 pub async fn subgraphGetPathFn(info: web::Path<(String, String)>,data: web::Data<APIActors>) ->  Result<HttpResponse, Error>   {
     //let r = crate::indexstorage::get_lastest_known_timewarps(data.storage.clone());
-    let start = match data.storage.get_lifeline_tx(&info.0) {
+    let _start = match data.storage.get_lifeline_tx(&info.0) {
         Some(v) => v,
         None => return Ok(HttpResponse::BadRequest().body("{\"error\" : \"Start is not a lifeline transaction\"}"))
     };
-    let end = match data.storage.get_lifeline_tx(&info.1) {
+    let _end = match data.storage.get_lifeline_tx(&info.1) {
         Some(v) => v,
         None => return Ok(HttpResponse::BadRequest().body("{\"error\" : \"End is not a lifeline transaction\"}"))
     };

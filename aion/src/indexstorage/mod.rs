@@ -186,6 +186,7 @@ pub trait LifelinePersistence: Send + Sync + std::fmt::Debug {
 pub trait PullJobsPersistence {
     fn store_pin_descriptor(&self, pin_descriptor:PinDescriptor) -> Result<(), String>;
     fn get_pin_descriptor(&self, id:&String) -> Option<PinDescriptor>;
+    //fn pin_descriptor_count(&self) -> i64;
 
     fn add_pull_job(&self, job:&PullJob);
     fn update_pull_job(&self, job:&PullJob);

@@ -31,8 +31,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use lazy_static::*;
 use iota_lib_rs::*;
 use actix_web::{
-     App, HttpServer,
+     App, HttpServer, http
 };
+use actix_cors::Cors;
 use actix_web::middleware::DefaultHeaders;
 use riker::actors::*;
 use hocon::HoconLoader;
@@ -315,23 +316,7 @@ async fn main() -> io::Result<()> {
     //std::thread::sleep(time::Duration::from_millis(2500));
 
     println!("Going to wait...");
-   // io::stdin().read_line(&mut String::new()).unwrap();
-    //timewarping::start();
-
-
-    
-
-    // HttpServer::new(|| 
-    //     App::new()
-    //     .service(
-    //         web::resource("/test").to(|req: HttpRequest| match *req.method() {
-    //             Method::GET => HttpResponse::Ok(),
-    //             Method::POST => HttpResponse::MethodNotAllowed(),
-    //             _ => HttpResponse::NotFound(),
-    //         })))
-    //     .bind("127.0.0.1:0")?
-    //     .run()
-    //     .await
+   
     if *no_api {
         println!("Going to wait...");
         io::stdin().read_line(&mut String::new()).unwrap();
@@ -347,9 +332,20 @@ async fn main() -> io::Result<()> {
             actor_system: arc_system.clone(),
             tw_selecting: tw_selection_actor.clone()
         })
-        .wrap(DefaultHeaders::new().header("Access-Control-Allow-Origin", "*"))
+        .wrap(Cors::new()
+             
+              .allowed_methods(vec!["GET", "POST"])
+              .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
+              .allowed_header(http::header::CONTENT_TYPE)
+              .max_age(3600)
+              .finish())
+            // .header("access-control-allow-origin", "*")
+            // .header("access-control-allow-methods","PUT,DELETE,POST,GET, OPTION")
+            // .header("access-control-expose-headers","*")
+            // .header("access-control-allow-headers","Content-Type, Access-Control-Allow-Headers, User-Agent, Referer"))
         //.service(webapi::storage::connect_storage_object_fn)
         .service(webapi::storage::create_storage_object_fn)
+        .service(webapi::storage::get_pin_jobs_fn)        
         .service(webapi::storage::get_storage_object_fn)
         .service(webapi::storage::store_storage_object_fn)
         .service(webapi::lifeline::lifelineUnpinnedF)
