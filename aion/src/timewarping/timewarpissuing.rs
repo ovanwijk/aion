@@ -8,7 +8,7 @@ use riker::actors::Context;
 
 use crate::timewarping::Protocol;
 use crate::timewarping::zmqlistener::RegisterZMQListener;
-use crate::indexstorage::TimewarpIssuingState;
+use crate::indexstorage::*;
 use crate::SETTINGS;
 use crate::indexstorage::{Persistence};
 //use iota_client::options::;
@@ -34,7 +34,9 @@ pub struct TimewarpIssuer {
     milestone_interval_in_seconds: i64,
     promote_timeout_in_seconds: i64,
     storage:Arc<dyn Persistence>,
-    node: String
+    node: String,
+    active: bool,
+    timewarp_selecting: ActorRef<Protocol>  
 }
 
 impl Actor for TimewarpIssuer {
@@ -48,7 +50,15 @@ impl Actor for TimewarpIssuer {
         // Use the respective Receive<T> implementation
         match msg {
             Protocol::RegisterZMQListener(__msg) => self.receive_registerzmqlistener(ctx, __msg, sender),
-            Protocol::Start => self.receive_step(ctx,  sender),
+            Protocol::Start => {
+                
+                let _res = self.timewarp_selecting.tell(Protocol::RegisterRoutee, Some(BasicActorRef::from(ctx.myself().clone())));
+               // let _res = self.timewarp_selecting.tell(Protocol::RegisterRoutee, Some(BasicActorRef::from(ctx.myself())));
+                // if _res.is_err() {
+                //     error!("Erro sending");
+                // }
+                self.receive_step(ctx,  sender)
+            },
             Protocol::Timer => self.receive_step(ctx, sender),
             Protocol::Ping => {
                 info!("Ping");
@@ -56,7 +66,8 @@ impl Actor for TimewarpIssuer {
             },
             Protocol::Pong => {
                 info!("Pong");
-            }
+            },
+            Protocol::KnownTimewarps(_msg) => self.decide_active(_msg), //TODO
             Protocol::TransactionConfirmed(__msg) => self.receive_transactionconfimation(ctx, __msg, sender),
             _ => ()
         }
@@ -68,8 +79,8 @@ impl Actor for TimewarpIssuer {
 
 
 impl TimewarpIssuer {
-    fn actor(storage:Arc<dyn Persistence>) -> Self {
-        let last_state = storage.get_timewarp_state();       
+    fn actor(args:(Arc<dyn Persistence>, ActorRef<Protocol> )) -> Self {
+        let last_state = args.0.get_timewarp_state();       
         let node = &SETTINGS.node_settings.iri_connection(); 
         TimewarpIssuer {
             state:  if last_state.is_some() {
@@ -81,7 +92,7 @@ impl TimewarpIssuer {
                     unconfirmed_txs: vec!(),
                     latest_confimed_timestamp: -1,
                     latest_confimed_tx: String::from(""),
-                    original_tx: "".to_string(),
+                    original_tx: "999999999".to_string(),
                     latest_private_key: Vec::new(),
                     tx_timestamp: HashMap::new(),
                     latest_timestamp: -1
@@ -92,15 +103,21 @@ impl TimewarpIssuer {
             milestone_interval_in_seconds: 120,
             max_queue_size: 20,
             promote_timeout_in_seconds: 15,
-            storage: storage,
+            storage: args.0.clone(),
+            active: false,
+            timewarp_selecting: args.1
            
-        }
+        }   
     }
-    pub fn props(storage_actor:Arc<dyn Persistence>) -> BoxActorProd<TimewarpIssuer> {
-        Props::new_args(TimewarpIssuer::actor, storage_actor)
+    pub fn props(args:(Arc<dyn Persistence>, ActorRef<Protocol> ))  -> BoxActorProd<TimewarpIssuer> {
+        Props::new_args(TimewarpIssuer::actor, args)
     }
 
     fn should_restart(&mut self) -> bool {
+        if !self.active {
+            
+            return false;
+        }
         let diff = crate::now() - (self.milestone_interval_in_seconds * 5);
         //self.state.latest_index_num() == 0 ||
         if  diff > self.state.latest_confimed_timestamp  {
@@ -110,12 +127,55 @@ impl TimewarpIssuer {
         false
     }
 
+    fn decide_active(&mut self, timewarps:Vec<TimewarpData>) {
+        
+        let selfid = &self.state.original_tx[0..9];
+        let filtered_maturity:Vec<&TimewarpData> = timewarps.iter().filter(|tw| tw.score() == TimewarpData::max_score() && tw.timestamp > crate::now() - (tw.avg_distance * 3)).collect(); //120 * 5, timewarps that at least are 5 milestones old
+        if filtered_maturity.len() >=5 {
+            if filtered_maturity.iter().any(|tw| tw.timewarpid == selfid) {
+               
+                self.active = true;    
+            }else{
+                if self.active == true {
+                    info!("Disabling timewarping");
+                }
+                self.active = false;
+            }
+            return;
+        }
+        let mut filtered_elegible:Vec<&TimewarpData> = timewarps.iter().filter(|tw| tw.score() >= 600 && tw.timestamp > crate::now() - (tw.avg_distance * 5))
+            .into_iter().collect();
+        if filtered_elegible.len() < 5 {
+            if self.active == false {
+                info!("Activating timewarping");
+            }
+            self.active = true;
+            return
+        }
+        filtered_elegible.sort_by(|a, b| b.score().cmp(&a.score())); //descending
+        let mut counter = 0;
+        for tw in filtered_elegible.iter() {
+            if tw.timewarpid == selfid && counter <= 15 {
+                if self.active == false {
+                    info!("Activating timewarping");
+                }
+                self.active = true;
+                return
+            }
+            counter += 1;
+        }
+        self.active = false;
+    }
+
     fn latest_tx_confirmed(&mut self) -> bool {
         //We standard give it 4 milestones to confirm.
         return self.state.latest_confimed_timestamp > crate::now() - self.milestone_interval_in_seconds * 4;
     }
 
     fn should_step(&mut self) -> bool {
+        if !self.active {
+            return false;
+        }
         let diff = crate::now() - self.state.latest_timestamp;
         (self.latest_tx_confirmed() && diff > self.timeout_in_seconds)
     }
@@ -158,7 +218,7 @@ impl TimewarpIssuer {
      
         let res =  msg.zmq_listener.try_tell(Protocol::RegisterRoutee, ctx.myself());
 
-        println!("Registering {:?}", res);
+        info!("Registering {:?}", res);
     }
 
 

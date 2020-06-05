@@ -88,7 +88,6 @@ pub async fn get_storage_object_fn(info: web::Path<String>, data: web::Data<APIA
    
 }
 
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PullJobResults {
     active: Vec<crate::indexstorage::PullJob>,
@@ -165,7 +164,7 @@ pub async fn store_storage_object_fn(info: web::Json<CreateStorageReponse>, data
     data.storage.add_pull_job(&pulljob);
     return Ok(HttpResponse::Ok()
             .content_type("application/json")
-            .body(format!("{{ \"pinid\":\"{}\"}}", base64::encode_config(&pin_descriptor.id(), base64::URL_SAFE))));
+            .body(format!("{{ \"pinid\":\"{}\"}}", pin_descriptor.id())));
     
    
    

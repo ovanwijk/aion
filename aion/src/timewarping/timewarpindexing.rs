@@ -57,6 +57,7 @@ impl Actor for TimewarpIndexing {
             Protocol::NewTransaction(__msg) => self.receive_newtransaction(ctx, __msg, sender),
             Protocol::TransactionConfirmed(__msg) => self.receive_transactionconfimation(ctx, __msg, sender),
             Protocol::TimewarpWalkingResult(id, __msg) => self.receive_timewalkresult(ctx, id, __msg, sender),
+           
             Protocol::Timer => {
                 self.receive_timer(ctx, sender);
             },
@@ -191,6 +192,7 @@ impl TimewarpIndexing {
         TimewarpIndexing {
             tangle: Tangle::default(),
             avg_count: 1,
+          
             avg_distance: 1000.0 ,//default 1 second
             storage: args.0,
             start_time: crate::now(),
@@ -200,6 +202,8 @@ impl TimewarpIndexing {
             timewarp_selecting: args.1
         }
     }
+
+
     pub fn receive_timer(&mut self,
         ctx: &Context<Protocol>,
         _sender: Sender) {
@@ -353,7 +357,7 @@ impl TimewarpIndexing {
      
         let res =  msg.zmq_listener.try_tell(Protocol::RegisterRoutee, ctx.myself());
 
-        println!("Registering {:?}", res);
+        info!("Registering {:?}", res);
     }
 
     pub fn props(args:(Arc<dyn Persistence>, ActorRef<Protocol>)) -> BoxActorProd<TimewarpIndexing> {

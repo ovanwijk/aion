@@ -7,7 +7,7 @@ pub mod timewarpselecting;
 pub mod transactionpinning;
 pub mod transactionpulling;
 use serde::{Serialize};
-
+use crate::indexstorage::*;
 
 
 #[derive(Clone, Debug)]
@@ -26,7 +26,8 @@ pub enum Protocol {
     TransactionConfirmed(String),
     RegisterZMQListener(zmqlistener::RegisterZMQListener),
     WebReply(String),
-    WebRequest(WebRequestType)
+    WebRequest(WebRequestType),
+    KnownTimewarps(Vec<TimewarpData>)
 
 }
 

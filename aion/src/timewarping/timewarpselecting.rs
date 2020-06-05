@@ -9,7 +9,7 @@
 use crate::SETTINGS;
 use riker::actors::*;
 use riker::actors::Context;
-
+use std::collections::LinkedList;
 //use iota_lib_rs::iota_model::Transaction;
 //use crate::aionmodel::tangle::*;
 use crate::indexstorage::Persistence;
@@ -29,6 +29,8 @@ use serde::{Serialize, Deserialize};
 #[derive(Debug)]
 pub struct TimewarpSelecting {
     picked_timewarp: Option<TimewarpSelectionState>,
+
+    routees: LinkedList<BasicActorRef>,
     //available_timewarps: HashMap<String, TimewarpData>,
     start_time: i64,
     storage: Arc<dyn Persistence>,
@@ -66,13 +68,14 @@ impl Actor for TimewarpSelecting {
             Protocol::Pong => {
                 info!("Pong");
             },
+            Protocol::RegisterRoutee => self.receive_registerroutee(ctx, msg, sender),
             Protocol::Ready => {
                 self.ready = true;
                 self.storage.set_generic_cache(crate::indexstorage::ALL_STARTED, b"true".to_vec());
                 self.receive_timer(ctx, sender);
             }
             //Protocol::TransactionConfirmed(__msg) => self.receive_transactionconfimation(ctx, __msg, sender),
-            _ => ()
+            _ => (error!("Got unknown message"))
         }
     }   
     
@@ -80,11 +83,24 @@ impl Actor for TimewarpSelecting {
 
 
 impl TimewarpSelecting {
+    fn receive_registerroutee(&mut self,
+        _ctx: &Context<Protocol>,
+        _msg: Protocol,
+        _sender: Sender) {
+        println!("Got routee selecting");
+        self.routees.push_back(_sender.unwrap());
+        //println!("Got start listening {}", _msg.host);
+    }
+
     fn pick_timewarp(&mut self, ctx:&Context<Protocol>){
         //We filter using the min_distance_in_seconds of timewarp time so that we are not switching from one to the
         //if two are started around the same time.
         let timewarps:std::vec::Vec<TimewarpData> = crate::indexstorage::get_lastest_known_timewarps(self.storage.clone())
             .into_iter().filter(|t| t.timestamp > crate::now() - (self.min_distance_in_seconds * 2)).collect();
+        
+        for routee in &self.routees {
+            let _res = routee.try_tell(Protocol::KnownTimewarps(timewarps.clone()), None);                
+        }
         if timewarps.len() == 0 {
             return;
         }
@@ -289,6 +305,7 @@ impl TimewarpSelecting {
             picked_timewarp: if last_picked.is_some() {
                 Some(last_picked.as_ref().unwrap().clone())
             }else { None },
+            routees: LinkedList::new(),
             storage: storage.clone(),            
             node: node.to_string(),
             min_distance_in_seconds: crate::SETTINGS.timewarp_index_settings.detection_threshold_switch_timewarp_in_seconds,

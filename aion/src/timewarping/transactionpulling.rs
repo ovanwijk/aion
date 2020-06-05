@@ -90,14 +90,14 @@ impl TransactionPulling {
                 //let is_local_node = unwrapped_job.node == SETTINGS.node_settings.iri_connection();
                 unwrapped_job.status = PIN_STATUS_IN_PROGRESS.to_string();
                 unwrapped_job.last_update = crate::now();
-
+                let mut end_reached = false;
                 self.storage.update_pull_job(&unwrapped_job);
-                while unwrapped_job.current_index < unwrapped_job.pathway.size {
+                while !end_reached {
                     let mut batch_vec:Vec<String> = vec!();
                     let mut ll_results:Vec<LifeLineData> = vec!();
                     let max_steps = unwrapped_job.max_steps();
                     //We explicitly do + one because we can walk to the transaction but we still need to pull it.
-                    for _i in 0..std::cmp::min(self.batching_size, max_steps + 1) {
+                    for _i in 0..(std::cmp::min(self.batching_size, max_steps) + 1) {
                         
                         let t1 = iota_api::get_trytes_async(unwrapped_job.node.clone(), vec!(unwrapped_job.current_tx.clone())).await;
                         if t1.is_err() {
@@ -112,7 +112,7 @@ impl TransactionPulling {
                         let u_trytes = t1.unwrap().trytes[0].clone();
                         let t_b_ts_tag = get_trunk_branch_ts_tag(&u_trytes);
                         batch_vec.push(u_trytes);
-
+                        
                         let (current_index, current_tx) = (unwrapped_job.current_index.clone(), unwrapped_job.current_tx.clone());
                         match pathway_iter.next() {
                             Some(step) =>  match step {
@@ -145,7 +145,7 @@ impl TransactionPulling {
                                 },
                                 _ => {}
                             },
-                            None => {}
+                            None => {end_reached=true;}
                         };
                         
                          //Handle lifeline case
@@ -158,70 +158,71 @@ impl TransactionPulling {
                                 ll_comp.lifeline_prev = Some((current_tx.clone(),t_b_ts_tag.2, t_b_ts_tag.3.clone(), unwrapped_job.pathway.tx_count as i64));
                             }else {
                            
-                             match ll_comp.lifeline_transitions.get(&(current_index as i64)) {
-                                    Some(end) => {
-                                        //let p = ll_comp.lifeline_prev.unwrap();
-                                        ll_comp.lifeline_prev_index = Some(current_index.clone() as i64);
-                                        //ll_comp.lifeline_prev = Some((p.0.clone(),t_b_ts_tag.2, t_b_ts_tag.3.clone(), p.3 - end ));
-                                    },
-                                    None => {
-                                        let prev = ll_comp.lifeline_prev.clone().expect("Message to be there");
-                                        if ll_comp.lifeline_prev_index.is_some() {
-                                            let start_index = ll_comp.lifeline_prev_index.unwrap();
-                                            let end_index = ll_comp.lifeline_transitions.get(&start_index).unwrap();
-                                            if end_index.clone() as usize == current_index - start_index as usize {
-                                                ll_results.push(LifeLineData{                                                            
-                                                    timewarp_tx: prev.0.clone(),                                                            
-                                                    timestamp: prev.1.clone(),
-                                                    unpinned_connecting_txs: vec!(), 
-                                                        paths: vec!(LifeLinePathData {
-                                                        transactions_till_oldest: prev.3.clone(),// TODO fix somehow
-                                                        oldest_tx: ll_comp.lifeline_end_tx.clone(),   
-                                                        
-                                                        oldest_timestamp: ll_comp.lifeline_end_ts.clone(),
-                                                    
-                                                        connecting_pathway: unwrapped_job.pathway.slice(start_index as usize, (start_index + *end_index) as usize),
-                                                        connecting_timestamp: t_b_ts_tag.2.clone(),
-                                                        connecting_timewarp: current_tx.clone()
-                                                    })
-                                                });
-
-                                                match ll_comp.lifeline_transitions.get(&(current_index as i64)) {
-                                                    Some(end) => {
-                                                        ll_comp.lifeline_prev_index = Some(current_index.clone() as i64);
-                                                        ll_comp.lifeline_prev = Some((current_tx.clone() ,t_b_ts_tag.2, t_b_ts_tag.3, prev.3 - 1 ));
-                                                    },
-                                                    None => {
-                                                        ll_comp.lifeline_prev_index = None;
-                                                        ll_comp.lifeline_prev = Some((current_tx.clone(),t_b_ts_tag.2, t_b_ts_tag.3, prev.3 - end_index ));
-                                                    }
-                                                }
-                                                
-                                                
-                                            } else {
-                                                //Ignore this step because it is withing the start and end indexes
-                                            }
-                                        } else {                                                    
-                                            ll_results.push(LifeLineData{
-                                                timewarp_tx: prev.0.clone(),                                                      
+                                    let prev = ll_comp.lifeline_prev.clone().expect("Message to be there");
+                                    if ll_comp.lifeline_prev_index.is_some() {
+                                        let start_index = ll_comp.lifeline_prev_index.unwrap();
+                                        let end_index = ll_comp.lifeline_transitions.get(&start_index).unwrap();
+                                        if end_index.clone() as usize == current_index - start_index as usize {
+                                            ll_results.push(LifeLineData{                                                            
+                                                timewarp_tx: prev.0.clone(),                                                            
                                                 timestamp: prev.1.clone(),
                                                 unpinned_connecting_txs: vec!(), 
-                                                paths: vec!(LifeLinePathData {
-                                                    transactions_till_oldest: prev.3,// TODO fix somehow
-                                                    oldest_tx: ll_comp.lifeline_end_tx.clone(),                                                        
-                                                    oldest_timestamp: ll_comp.lifeline_end_ts.clone(),                                                            
-                                                    connecting_pathway: if unwrapped_job.pathway.get_at_index(current_index - 1).unwrap() == crate::pathway::_T {PathwayDescriptor::trunk()} else {PathwayDescriptor::branch()},
+                                                    paths: vec!(LifeLinePathData {
+                                                    transactions_till_oldest: prev.3.clone(),// TODO fix somehow
+                                                    oldest_tx: ll_comp.lifeline_end_tx.clone(),   
+                                                    
+                                                    oldest_timestamp: ll_comp.lifeline_end_ts.clone(),
+                                                
+                                                    connecting_pathway: unwrapped_job.pathway.slice(start_index as usize, (start_index + *end_index) as usize),
                                                     connecting_timestamp: t_b_ts_tag.2.clone(),
                                                     connecting_timewarp: current_tx.clone()
                                                 })
                                             });
-                                            ll_comp.lifeline_prev_index = None;
-                                            ll_comp.lifeline_prev = Some((current_tx.clone(),t_b_ts_tag.2, t_b_ts_tag.3, prev.3 - 1));
+                                            match ll_comp.lifeline_transitions.get(&(current_index as i64)) {
+                                                Some(end) => {
+                                                    ll_comp.lifeline_prev_index = Some(current_index.clone() as i64);
+                                                    ll_comp.lifeline_prev = Some((current_tx.clone() ,t_b_ts_tag.2, t_b_ts_tag.3, prev.3 - 1 ));
+                                                },
+                                                None => {
+                                                    ll_comp.lifeline_prev_index = None;
+                                                    ll_comp.lifeline_prev = Some((current_tx.clone(),t_b_ts_tag.2, t_b_ts_tag.3, prev.3 - end_index ));
+                                                }
+                                            }
+                                            
+                                            
+                                        } else {
+                                            //Ignore this step because it is withing the start and end indexes
                                         }
-                                        
-                                    }
+                                    } else {
+                                            
+                                                                                  
+                                        ll_results.push(LifeLineData{
+                                            timewarp_tx: prev.0.clone(),                                                      
+                                            timestamp: prev.1.clone(),
+                                            unpinned_connecting_txs: vec!(), 
+                                            paths: vec!(LifeLinePathData {
+                                                transactions_till_oldest: prev.3,// TODO fix somehow
+                                                oldest_tx: ll_comp.lifeline_end_tx.clone(),                                                        
+                                                oldest_timestamp: ll_comp.lifeline_end_ts.clone(),                                                            
+                                                connecting_pathway: if unwrapped_job.pathway.get_at_index(current_index - 1).unwrap() == crate::pathway::_T {PathwayDescriptor::trunk()} else {PathwayDescriptor::branch()},
+                                                connecting_timestamp: t_b_ts_tag.2.clone(),
+                                                connecting_timewarp: current_tx.clone()
+                                            })
+                                        });
+                                        match ll_comp.lifeline_transitions.get(&(current_index as i64)) {
+                                            Some(end) => {
+                                                        //let p = ll_comp.lifeline_prev.unwrap();
+                                                        ll_comp.lifeline_prev_index = Some(current_index.clone() as i64);
+                                                        ll_comp.lifeline_prev = Some((current_tx.clone() ,t_b_ts_tag.2, t_b_ts_tag.3, prev.3 - 1 ));
+                                                        //ll_comp.lifeline_prev = Some((p.0.clone(),t_b_ts_tag.2, t_b_ts_tag.3.clone(), p.3 - end ));
+                                                    },
+                                            None => {      
+                                                ll_comp.lifeline_prev_index = None;
+                                                ll_comp.lifeline_prev = Some((current_tx.clone(),t_b_ts_tag.2, t_b_ts_tag.3, prev.3 - 1));
+                                            }                                        
+                                        }
                                 }
-                                }                                       
+                            }                                       
                                 
                             unwrapped_job.lifeline_component = Some(ll_comp);
                         }
@@ -232,7 +233,9 @@ impl TransactionPulling {
                         info!("Prepending: {}/{} : {}",unwrapped_job.current_index, ll_results.len(), unwrapped_job.id );
                         for ll_data in  ll_results {
                             match self.storage.prepend_to_lifeline(ll_data.clone()) {
-                                Err(e) => {error!("Prepend lifeline {}", e.to_string())},
+                                Err(e) => {
+                                    error!("Prepend lifeline {}", e.to_string())
+                                },
                                 _ => {info!("Prepend success {} ", ll_data.timewarp_tx)}
                             };
                         }

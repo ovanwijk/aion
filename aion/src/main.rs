@@ -285,13 +285,14 @@ async fn main() -> io::Result<()> {
     transactionpulling_actor.clone().tell(Protocol::Timer, None);
    //  let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
-    if !only_timewarp {
+   
 
         let indexing_actor = sys.actor_of(TimewarpIndexing::props((storage.clone(), tw_selection_actor.clone())), TIMEWARP_INDEXING_ACTOR).unwrap();
-        indexing_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
-        indexing_actor.tell(Protocol::Timer, None);
-        //let temp_actor = sys.actor_of(TimewarpWalker::props(storage.clone()), "timewarp-walking").unwrap();
-    }
+        &indexing_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
+        &indexing_actor.tell(Protocol::Timer, None);
+      
+        //let temp_actor = sys.actor_of(TimewarpWalker::props(storage.clone()), "timewarp-walking").unwrap();else N
+  
     //storage_actor.tell(Protocol::AddToIndexPersistence(TimewarpIndexEntry{key: 10, values: vec!["Hallo".to_string(), "world".to_string()]}), None);
    // storage_actor.tell(Protocol::GetFromIndexPersistence(10), None);
     
@@ -305,7 +306,8 @@ async fn main() -> io::Result<()> {
    
     let tw_issuing_actor = if *do_timewarp || *only_timewarp {
         info!("Start timewarping");
-        let timewarp_actor = &sys.actor_of(TimewarpIssuer::props(storage.clone()), TIMEWARP_ISSUER_ACTOR).unwrap();
+        let timewarp_actor = sys.actor_of(TimewarpIssuer::props((storage.clone(),  tw_selection_actor.clone())), TIMEWARP_ISSUER_ACTOR).unwrap();
+        //&timewarp_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(tw_selection_actor.clone())}), None);
         &timewarp_actor.tell(Protocol::RegisterZMQListener(RegisterZMQListener{zmq_listener: BasicActorRef::from(zmq_actor.clone())}), None);
         &timewarp_actor.tell(Protocol::Start, None);
         Some(timewarp_actor.clone())
@@ -338,12 +340,7 @@ async fn main() -> io::Result<()> {
               .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
               .allowed_header(http::header::CONTENT_TYPE)
               .max_age(3600)
-              .finish())
-            // .header("access-control-allow-origin", "*")
-            // .header("access-control-allow-methods","PUT,DELETE,POST,GET, OPTION")
-            // .header("access-control-expose-headers","*")
-            // .header("access-control-allow-headers","Content-Type, Access-Control-Allow-Headers, User-Agent, Referer"))
-        //.service(webapi::storage::connect_storage_object_fn)
+              .finish()) 
         .service(webapi::storage::create_storage_object_fn)
         .service(webapi::storage::get_pin_jobs_fn)        
         .service(webapi::storage::get_storage_object_fn)

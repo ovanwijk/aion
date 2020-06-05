@@ -244,6 +244,7 @@ pub struct TimewarpIssuingState {
 }
 
 impl TimewarpIssuingState {
+
     pub fn latest_tx(&self) -> String {
         if self.unconfirmed_txs.len() == 0 {
             self.latest_confimed_tx.clone()
@@ -282,6 +283,39 @@ pub struct TimewarpData {
     pub avg_distance: i64,
     pub index_since_id: i64,
 }
+
+impl TimewarpData {
+
+    
+    pub fn advance(&self, new_data: &crate::timewarping::Timewarp) -> TimewarpData {
+        TimewarpData {
+            timewarpid: self.timewarpid.clone(),
+            hash: new_data.source_hash.clone(),
+            branch: new_data.source_branch.clone(),
+            trunk: new_data.source_trunk.clone(),
+            timestamp: new_data.source_timestamp,
+            timestamp_deviation_factor: -1.0,
+            distance: new_data.distance,
+            index_since_id: self.index_since_id + 1,
+            avg_distance: ((self.avg_distance * self.index_since_id) + new_data.distance) / (self.index_since_id+1),
+            trunk_or_branch: self.trunk_or_branch
+        }
+     }
+     pub fn target_hash(&self) -> String {
+        if self.trunk_or_branch {
+            self.trunk.clone()
+        }else{
+            self.branch.clone()
+        }
+    }
+
+    pub fn score(&self) -> isize {        
+        (std::cmp::min(self.index_since_id, 50) * std::cmp::min(self.avg_distance, 120)) as isize
+    }
+    pub fn max_score() -> isize {
+        (50 * 120) as isize
+    }
+ }
 
 pub fn empty() -> String{
     String::new()
@@ -465,33 +499,6 @@ impl PullJob {
 }
 
 
-impl TimewarpData {
-    pub fn advance(&self, new_data: &crate::timewarping::Timewarp) -> TimewarpData {
-        TimewarpData {
-            timewarpid: self.timewarpid.clone(),
-            hash: new_data.source_hash.clone(),
-            branch: new_data.source_branch.clone(),
-            trunk: new_data.source_trunk.clone(),
-            timestamp: new_data.source_timestamp,
-            timestamp_deviation_factor: -1.0,
-            distance: new_data.distance,
-            index_since_id: self.index_since_id + 1,
-            avg_distance: ((self.avg_distance * self.index_since_id) + new_data.distance) / (self.index_since_id+1),
-            trunk_or_branch: self.trunk_or_branch
-        }
-     }
-     pub fn target_hash(&self) -> String {
-        if self.trunk_or_branch {
-            self.trunk.clone()
-        }else{
-            self.branch.clone()
-        }
-    }
-
-    pub fn score(&self) -> isize {        
-        (std::cmp::min(self.index_since_id, 100) * std::cmp::min(self.avg_distance, 120)) as isize
-    }
- }
 use serde::{Serializer, Deserializer};
 
 //  #[derive(Serialize, Deserialize)]

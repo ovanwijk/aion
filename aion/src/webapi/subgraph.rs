@@ -75,15 +75,24 @@ pub async fn insert_subgraph_fn(info: web::Json<InsertSubgraph>, data: web::Data
                                 _ => {}
                             }
                         }, 
-                        None =>  return Ok(HttpResponse::NotFound()
+                        None => return Ok(HttpResponse::NotFound()
                                 .content_type("application/json")
                                 .body("{\"error\":\"No lifeline component transaction not in subgraph\"}"))
+                            
+                        
                     }
 
                 },
-                None => return Ok(HttpResponse::NotFound()
-                .content_type("application/json")
-                .body("{\"error\":\"First transaction is not a known lifeline transaction\"}"))
+                None => {
+                    match data.storage.get_pull_job(&first_item.dependant) {
+                        Some(_) => {}
+                        None =>   return Ok(HttpResponse::NotFound()
+                        .content_type("application/json")
+                        .body("{\"error\":\"First transaction is not a known lifeline transaction\"}"))
+                    }
+                   
+
+                }
             }
             ,
         None => return Ok(HttpResponse::NotFound()
