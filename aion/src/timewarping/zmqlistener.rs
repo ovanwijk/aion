@@ -80,7 +80,7 @@ impl ZMQListener {
         println!("Got start listening {}", _msg.host);
         let node = &SETTINGS.node_settings.zmq_connection(); 
         self.socket.connect(&node).unwrap();
-        self.socket.set_subscribe("tx_trytes ".as_bytes()).unwrap();
+        self.socket.set_subscribe("trytes ".as_bytes()).unwrap();
         self.socket.set_subscribe("sn ".as_bytes()).unwrap();
         self.socket.set_subscribe("lmi ".as_bytes()).unwrap();
 
@@ -109,7 +109,7 @@ impl ZMQListener {
             let msg = msg.unwrap();
             let msg_string = msg.as_str().unwrap();
             
-            if msg_string.starts_with("tx_trytes "){
+            if msg_string.starts_with("trytes "){
                 // let split: Vec<&str> = msg_string.split(" ").collect();
                 // let mut tx: iota_lib_rs::iota_model::Transaction = split[1].parse().unwrap();
                 // tx.hash = String::from(split[2]);
