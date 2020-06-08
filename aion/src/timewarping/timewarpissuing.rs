@@ -31,6 +31,7 @@ pub struct TimewarpIssuer {
     state: TimewarpIssuingState,
     timeout_in_seconds: i64,
     max_queue_size: i64,
+    latest_tx: String,
     milestone_interval_in_seconds: i64,
     promote_timeout_in_seconds: i64,
     storage:Arc<dyn Persistence>,
@@ -99,6 +100,7 @@ impl TimewarpIssuer {
                 }
             },
             node: node.to_string(),
+            latest_tx: "".to_string(),
             timeout_in_seconds: SETTINGS.timewarp_issuing_settings.interval_in_seconds,
             milestone_interval_in_seconds: 120,
             max_queue_size: 20,
@@ -230,16 +232,47 @@ impl TimewarpIssuer {
                 }else{
             if self.should_restart() {
                 self.issue_first_transaction();
+            }else{
+                self.promote();
             }
                                 
             }
             _ctx.schedule_once(
-                std::time::Duration::from_secs(5),
+                std::time::Duration::from_secs(15),
                  _ctx.myself(), 
                  None, 
                  Protocol::Timer);
             
            
+    }
+    fn promote(&mut self) {
+        if self.latest_tx != "" {
+            let mut iota = iota_client::Client::new(&self.node); //TODO get from settings
+            let tips_result = iota.get_transactions_to_approve(GetTransactionsToApproveOptions {
+                depth: SETTINGS.timewarp_issuing_settings.tip_selection_depth as usize,
+                reference: None
+            }).expect("Tips to work");
+
+            let transfer = Transfer {
+                address: "AION9TIMEWARP9PROMOTE999999999999999999999999999999999999999999999999999999999999".to_string(),
+                tag: "AION9TIMEWARP9PROMOTE999999".to_string(), //Contains the hash to calculated the normalized TW_HASH,               
+                ..Transfer::default()
+            };
+ 
+            let prepared_transactions = iota.prepare_transfers(&self.state.seed, vec![transfer], options::PrepareTransfersOptions::default());
+            let pow_trytes = iota.attach_to_tangle(options::AttachOptions {
+                branch_transaction: if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&tips_result.branch_transaction().as_ref().unwrap()} else {&self.latest_tx},
+                trunk_transaction: if SETTINGS.timewarp_issuing_settings.trunk_or_branch {&self.latest_tx} else {&tips_result.trunk_transaction().as_ref().unwrap() }, 
+                min_weight_magnitude: SETTINGS.timewarp_issuing_settings.minimum_weight_magnitude as usize,
+                trytes: &prepared_transactions.unwrap(),
+                ..options::AttachOptions::default()
+            }).unwrap().trytes().unwrap();
+    
+            iota.store_transactions(&pow_trytes);
+            iota.broadcast_transactions(&pow_trytes);
+            let tx: Transaction = pow_trytes[0].parse().unwrap();
+            self.latest_tx = tx.hash.to_string();
+        }
     }
 
     fn issue_next_transaction(&mut self)  {
@@ -293,7 +326,9 @@ impl TimewarpIssuer {
                     seed: self.state.seed.clone(),
                     latest_timestamp: tx.attachment_timestamp / 1000,
                 
+                    
                 };
+        self.latest_tx = tx.hash.to_string();
         self.storage.save_timewarp_state(new_state.clone());
         self.state = new_state;
         //let mut txs:Vec<Transaction> = pow_trytes.iter().map(|x| x.parse()).collect();
