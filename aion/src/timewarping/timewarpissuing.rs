@@ -271,6 +271,7 @@ impl TimewarpIssuer {
             iota.store_transactions(&pow_trytes);
             iota.broadcast_transactions(&pow_trytes);
             let tx: Transaction = pow_trytes[0].parse().unwrap();
+
             self.latest_tx = tx.hash.to_string();
         }
     }
@@ -392,6 +393,7 @@ impl TimewarpIssuer {
                 };
         self.storage.save_timewarp_state(new_state.clone());
         self.state = new_state;
+        self.latest_tx = self.state.original_tx.clone();
         info!("Started new timewarp: {}", &self.state.original_tx);
         //let mut txs:Vec<Transaction> = pow_trytes.iter().map(|x| x.parse()).collect();
         

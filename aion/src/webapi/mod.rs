@@ -16,6 +16,7 @@ pub mod webask;
 pub mod lifeline;
 pub mod storage;
 pub mod subgraph;
+pub mod iotaapiproxy;
 
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -26,6 +26,7 @@ mod indexstorage;
 mod pathway;
 mod webapi;
 mod iota_api;
+mod txstorage;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 use lazy_static::*;
@@ -261,7 +262,7 @@ async fn main() -> io::Result<()> {
     lazy_static::initialize(&SETTINGS);
 
     let storage:Arc<dyn Persistence> = Arc::new(RocksDBProvider::new());
-
+    let txStorage:Arc<dyn txstorage::TXPersistence> = Arc::new(txstorage::RocksDBTXProvider::new());
 
 
     // let mut pop = storage.next_pull_job(&0);
