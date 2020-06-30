@@ -19,6 +19,7 @@ use crate::pathway::PathwayDescriptor;
 use crate::timewarping::Protocol;
 use crate::timewarping::WebRequestType;
 use crate::aionmodel::lifeline_subgraph::GraphEntryEvent;
+use crate::txstorage::*;
 // use crate::timewarping::Timewarp;
 // use crate::timewarping::signing;
 // use crate::timewarping::timewarpwalker::*;
@@ -33,6 +34,7 @@ pub struct TransactionPulling {
     
     start_time: i64,
     storage: Arc<dyn Persistence>,
+    tx_storage: Arc<dyn TXPersistence>,
     batching_size: usize,
     working: bool,
     
@@ -93,7 +95,8 @@ impl TransactionPulling {
                 let mut end_reached = false;
                 self.storage.update_pull_job(&unwrapped_job);
                 while !end_reached {
-                    let mut batch_vec:Vec<String> = vec!();
+                    let mut batch_vec:Vec<(String, String)> = vec!();
+                    //let mut batch_tx_vec:Vec<String> = vec!();
                     let mut ll_results:Vec<LifeLineData> = vec!();
                     let max_steps = unwrapped_job.max_steps();
                     //We explicitly do + one because we can walk to the transaction but we still need to pull it.
@@ -111,7 +114,8 @@ impl TransactionPulling {
                         }
                         let u_trytes = t1.unwrap().trytes[0].clone();
                         let t_b_ts_tag = get_trunk_branch_ts_tag(&u_trytes);
-                        batch_vec.push(u_trytes);
+                        batch_vec.push((unwrapped_job.current_tx.clone(), u_trytes));
+                        
                         
                         let (current_index, current_tx) = (unwrapped_job.current_index.clone(), unwrapped_job.current_tx.clone());
                         match pathway_iter.next() {
@@ -169,10 +173,8 @@ impl TransactionPulling {
                                                 unpinned_connecting_txs: vec!(), 
                                                     paths: vec!(LifeLinePathData {
                                                     transactions_till_oldest: prev.3.clone(),// TODO fix somehow
-                                                    oldest_tx: ll_comp.lifeline_end_tx.clone(),   
-                                                    
-                                                    oldest_timestamp: ll_comp.lifeline_end_ts.clone(),
-                                                
+                                                    oldest_tx: ll_comp.lifeline_end_tx.clone(),                                                    
+                                                    oldest_timestamp: ll_comp.lifeline_end_ts.clone(),                                                
                                                     connecting_pathway: unwrapped_job.pathway.slice(start_index as usize, (start_index + *end_index) as usize),
                                                     connecting_timestamp: t_b_ts_tag.2.clone(),
                                                     connecting_timewarp: current_tx.clone()
@@ -227,7 +229,9 @@ impl TransactionPulling {
                             unwrapped_job.lifeline_component = Some(ll_comp);
                         }
                     }
-                    let pinned_trytes = iota_api::pin_transaction_trytes_async(unwrapped_job.node.clone(), batch_vec).await;
+
+                    
+                    let pinned_trytes = self.tx_storage.store_txs(batch_vec); //iota_api::pin_transaction_trytes_async(unwrapped_job.node.clone(), batch_vec).await;
                     if !pinned_trytes.is_err() {
                         //TODO update ll_comp
                         info!("Prepending: {}/{} : {}",unwrapped_job.current_index, ll_results.len(), unwrapped_job.id );
@@ -290,17 +294,18 @@ impl TransactionPulling {
 
 
 impl TransactionPulling {
-    fn actor(storage:Arc<dyn Persistence>) -> Self {
+    fn actor(storage:(Arc<dyn Persistence>, Arc<dyn TXPersistence>)) -> Self {
         
         TransactionPulling {
           
             batching_size: 25,
             working: false,
-            storage: storage.clone(),            
+            storage: storage.0.clone(),            
+            tx_storage: storage.1.clone(),    
             start_time: crate::now()
         }
     }
-    pub fn props(storage:Arc<dyn Persistence>) -> BoxActorProd<TransactionPulling> {
+    pub fn props(storage:(Arc<dyn Persistence>, Arc<dyn TXPersistence>)) -> BoxActorProd<TransactionPulling> {
         Props::new_args(TransactionPulling::actor, storage)
     }
     pub fn receive_webrequest(&mut self,
@@ -314,7 +319,7 @@ impl TransactionPulling {
         ctx: &Context<Protocol>,
         _sender: Sender) {
        
-        let finished =  async_std::task::block_on(self.do_work());     
+        let finished = async_std::task::block_on(self.do_work());     
         if finished {
             ctx.schedule_once(
                 std::time::Duration::from_secs(2),

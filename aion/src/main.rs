@@ -42,6 +42,7 @@ use std::*;
 use std::sync::Arc;
 use indexstorage::rocksdb_impl::RocksDBProvider;
 use indexstorage::{Persistence};
+use txstorage::*;
 use timewarping::zmqlistener::*;
 use timewarping::timewarpindexing::*;
 //use aionmodel::lifeline_subgraph::*;
@@ -217,6 +218,7 @@ lazy_static! {
 
 pub struct APIActors {
     storage: Arc<dyn Persistence>,
+    tx_storage: Arc<dyn txstorage::TXPersistence>,
     actor_system: Arc<ActorSystem>,
     tw_selecting: riker::actor::ActorRef<timewarping::Protocol>
 }
@@ -262,7 +264,7 @@ async fn main() -> io::Result<()> {
     lazy_static::initialize(&SETTINGS);
 
     let storage:Arc<dyn Persistence> = Arc::new(RocksDBProvider::new());
-    let txStorage:Arc<dyn txstorage::TXPersistence> = Arc::new(txstorage::RocksDBTXProvider::new());
+    let tx_storage:Arc<dyn txstorage::TXPersistence> = Arc::new(txstorage::RocksDBTXProvider::new());
 
 
     // let mut pop = storage.next_pull_job(&0);
@@ -279,10 +281,10 @@ async fn main() -> io::Result<()> {
     let tw_selection_actor = sys.actor_of(TimewarpSelecting::props(storage.clone()), TIMEWARP_SELECTION_ACTOR).unwrap();
 
     
-    let transactionpinning_actor = sys.actor_of(TransactionPinning::props(storage.clone()), PINNING_ACTOR).unwrap();
+    let transactionpinning_actor = sys.actor_of(TransactionPinning::props((storage.clone(), tx_storage.clone())), PINNING_ACTOR).unwrap();
     transactionpinning_actor.clone().tell(Protocol::Timer, None);
 
-    let transactionpulling_actor = sys.actor_of(TransactionPulling::props(storage.clone()), PULLING_ACTOR).unwrap();
+    let transactionpulling_actor = sys.actor_of(TransactionPulling::props((storage.clone(), tx_storage.clone())), PULLING_ACTOR).unwrap();
     transactionpulling_actor.clone().tell(Protocol::Timer, None);
    //  let storage_actor = sys.actor_of(RocksDBProvider::props(), STORAGE_ACTOR).unwrap();
 
@@ -331,6 +333,7 @@ async fn main() -> io::Result<()> {
     HttpServer::new(
         move || App::new().data(APIActors {
             storage: storage.clone(),
+            tx_storage: tx_storage.clone(),
            // lifeline_subgraph: ll_subgraph.clone(),
             actor_system: arc_system.clone(),
             tw_selecting: tw_selection_actor.clone()
@@ -361,6 +364,7 @@ async fn main() -> io::Result<()> {
         .service(webapi::timewarpIdFn)
         .service(webapi::timewarpIdMaxFn)
         .service(webapi::aionStatusFn)
+        .service(webapi::iotaapiproxy::iota_proxy)
 
         
             // .service(
